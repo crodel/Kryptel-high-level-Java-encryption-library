@@ -24,10 +24,10 @@
 package com.kryptel.silver_key;
 
 
-import com.kryptel.IKeyCallback;
 import com.kryptel.INotification;
 import com.kryptel.IProgressCallback;
 import com.kryptel.IReplaceCallback;
+import com.kryptel.key.IKeyCallback;
 
 
 public interface ISilverKeyExtractor {

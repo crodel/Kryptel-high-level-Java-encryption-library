@@ -1,10 +1,10 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          Parcel.java
+  File:          Parcel5.java
   Description:   https://www.kryptel.com/articles/developers/java/sk.php
 
-  Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
+  Copyright (c) 2018 Inv Softworks LLC,    http://www.kryptel.com
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -24,11 +24,15 @@
 package com.kryptel.silver_key;
 
 
-import static com.kryptel.ApiHelpers.ConvertPassword;
 import static com.kryptel.Capabilities.*;
 import static com.kryptel.Constants.*;
 import static com.kryptel.Guids.*;
 import static com.kryptel.bslx.Targets.*;
+import static com.kryptel.key.KeyBlock.PASSWORD_CAN_CREATE;
+import static com.kryptel.key.KeyUtils.DeriveEncryptionKey;
+import static com.kryptel.key.KeyUtils.DeriveHmacKey;
+import static com.kryptel.key.KeyUtils.DeriveInitVector;
+import static com.kryptel.key.KeyUtils.FillComponentDescriptor;
 import static com.kryptel.silver_key.SilverKey.*;
 
 import java.io.File;
@@ -47,11 +51,12 @@ import com.kryptel.cipher.*;
 import com.kryptel.compressor.*;
 import com.kryptel.exceptions.UserAbortException;
 import com.kryptel.hash_function.*;
+import com.kryptel.key.IKeyCallback;
 import com.kryptel.mac.IMacSetup;
 
 
-final class Parcel implements ISilverKeyParcel {
-	Parcel(long capabilities) throws Exception {
+final class Parcel5 implements ISilverKeyParcel {
+	Parcel5(long capabilities) throws Exception {
 		compCapabilities = capabilities;
 		
 		parcelMD5 = MessageDigest.getInstance("MD5");
@@ -59,10 +64,13 @@ final class Parcel implements ISilverKeyParcel {
 		rand = new SecureRandom();
 		rand.setSeed(rand.generateSeed(256 / 8));
 
+		hashFunctionComp = Loader.CreateComponent(CID_HASH_SHA512, compCapabilities);
+		hashFunctionParams = (IHashFunctionParams)hashFunctionComp.GetInterface(IID_IHashFunctionParams);
+
 		hmacComp = Loader.CreateComponent(CID_HMAC, compCapabilities);
 		hmacSetup = (IMacSetup)hmacComp.GetInterface(IID_IMacSetup);
 		hmacSetup.SetBase(CID_HASH_SHA512);
-		hmacParams = (IHashFunctionParams)hmacComp.GetInterface(IID_IHashFunctionParams);
+		blockHmac = (IMemoryBlockHash)hmacComp.GetInterface(IID_IMemoryBlockHash);
 		hmacFunc = (IHashFunction)hmacComp.GetInterface(IID_IHashFunction);
 		
 		compressorComp = Loader.CreateComponent(CID_COMPRESSOR_ZIP, compCapabilities);
@@ -118,15 +126,23 @@ final class Parcel implements ISilverKeyParcel {
 		rawBlockCipher = (IRawBlockCipher)cipherComp.GetInterface(IID_IRawBlockCipher);
 		streamCipher = (ICipher)cipherComp.GetInterface(IID_ICipher);
 		
-		keyRecord = keyFunc.Callback(arg, parcelTitle, IKeyCallback.PASSWORDS | IKeyCallback.BINARY_KEY, null);
-		if (keyRecord == null) throw new UserAbortException();
-		if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PASSWORD) || keyRecord.keyMaterial.equals(KeyIdent.IDENT_LOWERCASE_PASSWORD)) ConvertPassword(keyRecord, CID_HASH_SHA512);
+		// Get key
 		
-		cipherParams.SetKey(keyRecord.keyData, 0, cipherParams.GetKeySize());
-		SetupHmacKey(keyRecord);
+		IKeyCallback.KeyData keyData = keyFunc.EncryptionKeyCallback(arg, parcelTitle,
+				FillComponentDescriptor(cipherComp, cipherParams, hashFunctionComp, hashFunctionParams));
+		if ((keyData.flags & PASSWORD_CAN_CREATE) == 0)  throw new Exception(Message.Get(Message.Code.InsufficientKeyRights));
+		keyBlock = keyData.keyRecord;
+		encryptionKey = DeriveEncryptionKey(keyData.baseKey, cipherParams.GetKeySize());
+		hmacKey = DeriveHmacKey(keyData.baseKey);
+		initVector = DeriveInitVector(keyData.baseKey, cipherParams.GetBlockSize());
+		Arrays.fill(keyData.baseKey, (byte)0);
+
+		cipherParams.SetKey(encryptionKey, 0, encryptionKey.length);
+		hmacSetup.SetKey(hmacKey, 0, hmacKey.length);
+		keyBlockHmac = blockHmac.HashBlock(keyBlock, 0, keyBlock.length);
 		
-		initVector = new byte [cipherParams.GetBlockSize()];
-		rand.nextBytes(initVector);
+		rawBlockCipher.EncryptBlock(initVector, 0, initVector, 0);
+		cipherParams.SetInitVector(initVector, 0, cipherParams.GetBlockSize());
 		
 		parcelGuid = CID_PARCEL_GUID;
 		
@@ -465,8 +481,8 @@ final class Parcel implements ISilverKeyParcel {
   // Private data and methods
   //
 	
-	private static final short ENGINE_VERSION_CREATED				= Engine.ENGINE_VERSION;
-	private static final short EXTRACTOR_VERSION_REQUIRED		= (short)0x0700;
+	private static final short ENGINE_VERSION_CREATED				= Engine5.ENGINE_VERSION;
+	private static final short EXTRACTOR_VERSION_REQUIRED		= Engine5.MINIMAL_COMPATIBLE_ENGINE_VERSION;
 	
 	private static final int FILE_AREA_OBFUSCATION_THRESHOLD		= (32 * 1024);
 	private static final int SCRIPT_AREA_OBFUSCATION_THRESHOLD	= 512;
@@ -492,9 +508,12 @@ final class Parcel implements ISilverKeyParcel {
 	private PARCEL_TYPE parcelType;
 	private String parcelFileName;
 
-	private KeyRecord keyRecord;
+	private byte[] encryptionKey;
+	private byte[] hmacKey;
 	private byte[] initVector;
-	
+	private byte[] keyBlock;
+	private byte[] keyBlockHmac;
+
 	UUID parcelGuid;
 	private int parcelFlags;
 	
@@ -526,8 +545,11 @@ final class Parcel implements ISilverKeyParcel {
 	
 	private IKryptelComponent hmacComp;
 	private IMacSetup hmacSetup;
-	private IHashFunctionParams hmacParams;
+	private IMemoryBlockHash blockHmac;
 	private IHashFunction hmacFunc;
+	
+	private IKryptelComponent hashFunctionComp;
+	private IHashFunctionParams hashFunctionParams;
 	
 	private IKryptelComponent compressorComp;
 	private ICompressorParams compressorParams;
@@ -540,37 +562,7 @@ final class Parcel implements ISilverKeyParcel {
 	private ICipher streamCipher;
 	
 	
-	private void SetupHmacKey(KeyRecord keyRecord) throws Exception {
-		assert (keyRecord.keyData.length > 0 && keyRecord.keyData.length <= BINARY_KEY_SIZE);
-		byte[] hmacKey = new byte [BINARY_KEY_SIZE];
-		Arrays.fill(hmacKey, (byte)0);
-		for (int i = 0, j = keyRecord.keyData.length; i < keyRecord.keyData.length; ) hmacKey[i++] = (byte)(~keyRecord.keyData[--j]);
-		hmacSetup.SetKey(hmacKey, 0, 512 / 8);
-	}
-	
-	
-	private byte[] ComputeVerificator(int nCounts) throws Exception {
-		byte[] keyVerificator = new byte [hmacParams.GetHashSize()];
-
-		int[] verArray = new int [nCounts];
-		byte[] verBytes = new byte [nCounts * 4];
-		
-		for (int i = 0; i < nCounts; i++) {
-			verArray[i] = i;
-			Conversions.ToBytes(verBytes, 0, verArray, 0, (i + 1) * 4);
-			hmacFunc.Init();
-			hmacFunc.Hash(verBytes, 0, (i + 1) * 4);
-			hmacFunc.Hash(keyVerificator, 0, keyVerificator.length);
-			keyVerificator = hmacFunc.Done();
-		}
-		return keyVerificator;
-	}
-	
-	
 	private void WriteHeader() throws Exception {
-		int verCounts = VERIFICATION_LOOP_COUNT;
-		byte[] keyVerificator = ComputeVerificator(verCounts);	// Uses HMAC so must be called before hmacFunc.Init()
-
 		hmacFunc.Init();
 		parcelMD5.reset();
 		
@@ -581,7 +573,7 @@ final class Parcel implements ISilverKeyParcel {
 		ver = EXTRACTOR_VERSION_REQUIRED;
 		Store(Write, ver);
 		
-		Store(Write, Conversions.UuidToBytes(CID_SILVER_KEY));
+		Store(Write, Conversions.UuidToBytes(CID_SILVER_KEY_5));
 		Store(Write, Conversions.UuidToBytes(parcelGuid));
 		Store(Write, parcelFlags);
 		
@@ -596,13 +588,9 @@ final class Parcel implements ISilverKeyParcel {
 		Conversions.ToBytes(bparams, 0, params, 0, 20);
 		Store(Write, bparams);
 		
-		Store(Write, Conversions.UuidToBytes(keyRecord.keyMaterial));
-		Store(Write, verCounts);
-		Store(Write, keyVerificator);
-		
-		byte[] encVector = new byte [cipherParams.GetBlockSize()];
-		rawBlockCipher.DecryptBlock(encVector, 0, initVector, 0);
-		Store(Write, encVector);
+		Store(Write, Conversions.ShortAsBytes((short)keyBlock.length));
+		Store(Write, keyBlock);
+		Store(Write, keyBlockHmac);
 		
 		Store(Write, cipherComp.ComponentName());
 		CipherInfo info = cipherParams.GetInfo();
@@ -696,9 +684,14 @@ final class Parcel implements ISilverKeyParcel {
 		state = (IComponentState)compressorComp.GetInterface(IID_IComponentState);
 		state.Reset();
 		
-		if (keyRecord != null) {
-			Arrays.fill(keyRecord.keyData, (byte)0);
-			keyRecord = null;
+		if (encryptionKey != null) {
+			Arrays.fill(encryptionKey, (byte)0);
+			encryptionKey = null;
+		}
+		
+		if (hmacKey != null) {
+			Arrays.fill(hmacKey, (byte)0);
+			hmacKey = null;
 		}
 		
 		if (initVector != null) {

@@ -30,16 +30,16 @@ import static com.kryptel.Guids.IID_IMemoryBlockHash;
 import static com.kryptel.IProgressCallback.MIN_SIZE_TO_STEP;
 import static com.kryptel.IProgressCallback.NO_TOTAL_PROGRESS_BAR;
 import static com.kryptel.IProgressCallback.PROGRESS_STEPS;
-import static com.kryptel.KeyIdent.IDENT_FILE_BASED_KEY;
-import static com.kryptel.KeyIdent.IDENT_INVALID_KEY;
-import static com.kryptel.KeyIdent.IDENT_LOWERCASE_PASSWORD;
-import static com.kryptel.KeyIdent.IDENT_NULL;
-import static com.kryptel.KeyIdent.IDENT_PASSWORD;
-import static com.kryptel.KeyIdent.IDENT_PROTECTED_KEY;
-import static com.kryptel.KeyIdent.IDENT_PUBLIC_KEY;
-import static com.kryptel.KeyIdent.IDENT_RAW_BINARY_KEY;
-import static com.kryptel.KeyIdent.IDENT_YUBIKEY;
-import static com.kryptel.KeyIdent.IDENT_YUBIKEY_PASSWORD;
+import static com.kryptel.key.KeyIdent.IDENT_FILE_BASED_KEY;
+import static com.kryptel.key.KeyIdent.IDENT_INVALID_KEY;
+import static com.kryptel.key.KeyIdent.IDENT_LOWERCASE_PASSWORD;
+import static com.kryptel.key.KeyIdent.IDENT_NULL;
+import static com.kryptel.key.KeyIdent.IDENT_PASSWORD;
+import static com.kryptel.key.KeyIdent.IDENT_PROTECTED_KEY;
+import static com.kryptel.key.KeyIdent.IDENT_PUBLIC_KEY;
+import static com.kryptel.key.KeyIdent.IDENT_RAW_BINARY_KEY;
+import static com.kryptel.key.KeyIdent.IDENT_YUBIKEY;
+import static com.kryptel.key.KeyIdent.IDENT_YUBIKEY_PASSWORD;
 
 import java.io.RandomAccessFile;
 import java.util.UUID;
@@ -47,6 +47,9 @@ import java.util.UUID;
 import com.kryptel.exceptions.UserAbortException;
 import com.kryptel.hash_function.IHashFunction;
 import com.kryptel.hash_function.IMemoryBlockHash;
+import com.kryptel.key.IKeyCallback;
+import com.kryptel.key.KeyIdent;
+import com.kryptel.key.KeyRecord;
 
 
 public final class ApiHelpers {

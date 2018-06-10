@@ -609,7 +609,10 @@ class DirectoryObject extends AgentObject implements IEncryptedDirectory {
 			ArrayList<String> names = new ArrayList<String>(fileMap.size());
 			for (String nm: fileMap.keySet()) names.add(nm);
 			
-			for (int i = 0; i < names.size(); i++) Delete(names.get(i), true);		// 2nd arg is ignored for files
+			for (int i = 0; i < names.size(); i++) {
+				FileObject file = fileMap.get(names.get(i));
+				if (!file.IsDeleted()) Delete(names.get(i), true);		// 2nd arg is ignored for files
+			}
 		}
 		
 		if (dirMap.size() != 0) {
@@ -617,7 +620,10 @@ class DirectoryObject extends AgentObject implements IEncryptedDirectory {
 			ArrayList<String> names = new ArrayList<String>(dirMap.size());
 			for (String nm: dirMap.keySet()) names.add(nm);
 			
-			for (int i = 0; i < names.size(); i++) Delete(names.get(i), true);		// 2nd arg is true as function is called as part of recursive delete
+			for (int i = 0; i < names.size(); i++) {
+				DirectoryObject dir = dirMap.get(names.get(i));
+				if (!dir.IsDeleted()) Delete(names.get(i), true);			// 2nd arg is true as function is called as part of recursive delete
+			}
 		}
 	}
 

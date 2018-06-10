@@ -34,6 +34,7 @@ import java.util.UUID;
 public final class Kryptel {
 	public static final int CONTAINER_TAG											= 0x07AA050B;
 	public static final int TRAILER_TAG												= 0x0B0507AA;
+	public static final int TRAILER_V8_TAG										= 0x0B0508AA;
 
 	public static final int FIXUP_IN_PROGRESS_TAG							= 0x70ADB050;
 	public static final int FIXUP_TAG													= 0x70AEB050;
@@ -43,6 +44,7 @@ public final class Kryptel {
 
 	public static final int ALIGNMENT_BOUNDARY								= 4096;		// Must be power of 2
 
+	// Pre-Kryptel 8 definitions
 	public static final int CONTAINER_TRAILER_SIZE						= 98;			// (sizeof(DWORD) + sizeof(WORD) + 2 * 6 + 5 * sizeof(MD5::MD5_HASH))
 	public static final int FIXUP_SEGMENT_TRAILER_SIZE				= 102;		// (sizeof(DWORD) + 3 * 6 + 5 * sizeof(MD5::MD5_HASH))
 

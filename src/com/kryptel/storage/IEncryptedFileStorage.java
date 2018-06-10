@@ -26,8 +26,8 @@ package com.kryptel.storage;
 
 import java.util.UUID;
 
-import com.kryptel.IKeyCallback;
 import com.kryptel.IKryptelComponent;
+import com.kryptel.key.IKeyCallback;
 import com.kryptel.storage.IEncryptedStorage.CONTAINER_COMPRESSION_STRATEGY;
 
 

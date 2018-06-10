@@ -31,8 +31,8 @@ import java.io.File;
 import java.util.StringTokenizer;
 import java.util.UUID;
 
-import com.kryptel.IKeyCallback;
 import com.kryptel.IKryptelComponent;
+import com.kryptel.key.IKeyCallback;
 
 
 class FileAgent extends Agent {

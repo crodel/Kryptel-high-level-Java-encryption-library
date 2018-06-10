@@ -1,9 +1,9 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          FixupObject7.java
+  File:          FixupObject8.java
 
-  Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
+  Copyright (c) 2018 Inv Softworks LLC,    http://www.kryptel.com
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -30,15 +30,15 @@ import java.util.Arrays;
 import java.util.UUID;
 
 
-abstract class FixupObject7 {
-	FixupObject7(Storage7 stor, Object7 obj, short tg) {
+abstract class FixupObject8 {
+	FixupObject8(Storage8 stor, Object8 obj, short tg) {
 		tag = tg;
 		storage = stor;
 		next = null;
 		
 		nUids = 0;
 		if (obj.parent != null) {					// If not root
-			Object7 ob = obj;
+			Object8 ob = obj;
 			do {
 				nUids++;
 				ob = ob.parent;
@@ -67,7 +67,7 @@ abstract class FixupObject7 {
 	}
 	
 	
-	FixupObject7 Reduce() {			// Returns pointer to the next object to reduce
+	FixupObject8 Reduce() {			// Returns pointer to the next object to reduce
 		return next;
 	}
 	
@@ -94,7 +94,7 @@ abstract class FixupObject7 {
 	}
 	
 	
-	boolean IsSameObject(FixupObject7 fo) {
+	boolean IsSameObject(FixupObject8 fo) {
 		if (fo.nUids != nUids) return false;
 		for (int i = 0; i < nUids; i++) {
 			if (!uidPath[i].equals(fo.uidPath[i])) return false;
@@ -103,7 +103,7 @@ abstract class FixupObject7 {
 	}
 	
 	
-	FixupObject7 RemoveObject(FixupObject7 prev, FixupObject7 current) {
+	FixupObject8 RemoveObject(FixupObject8 prev, FixupObject8 current) {
 		prev.next = current.next;
 		if (prev.next == null) storage.fixupListTail = prev;
 		return prev.next;
@@ -112,7 +112,7 @@ abstract class FixupObject7 {
 
 	void DeleteMe() {
 		if (storage.fixupList != this) {		// If I am not the first element
-			FixupObject7 prev = storage.fixupList;
+			FixupObject8 prev = storage.fixupList;
 			while (prev.next != this) prev = prev.next;
 			prev.next = next;
 
@@ -136,21 +136,21 @@ abstract class FixupObject7 {
 	//
 	
 	short tag;
-	FixupObject7 next;
+	FixupObject8 next;
 	
-	protected Storage7 storage;
+	protected Storage8 storage;
 	protected UUID[] uidPath;
 	protected int nUids;
 }
 
 
 //**************************************************************
-//*** FixupAddObject7
+//*** FixupAddObject8
 
 
-class FixupAddObject7 extends FixupObject7 {
+class FixupAddObject8 extends FixupObject8 {
 
-	FixupAddObject7(Storage7 stor, Object7 obj) {
+	FixupAddObject8(Storage8 stor, Object8 obj) {
 		super(stor, obj, FIXUP_RECORD_ADD_OBJECT);
 
 		recBlockSize = obj.recBlockSize;
@@ -168,26 +168,26 @@ class FixupAddObject7 extends FixupObject7 {
 	}
 
 	
-	FixupObject7 Reduce() {
-		FixupObject7 prev = this;
-		FixupObject7 p = next;
+	FixupObject8 Reduce() {
+		FixupObject8 prev = this;
+		FixupObject8 p = next;
 		
 		while (p != null) {
 			if (IsSameObject(p)) {
 				if (p.tag == FIXUP_RECORD_ATTACH_ATTRIBUTES) {		// Reduce
-					attrBlock = ((FixupAttachAttributes7)p).attrBlock;
+					attrBlock = ((FixupAttachAttributes8)p).attrBlock;
 					p = RemoveObject(prev, p);
 					continue;
 				}
 				
 				else if (p.tag == FIXUP_RECORD_ATTACH_DATA) {			// Reduce
-					recBlockSize = ((FixupAttachData7)p).recBlockSize;
-					dataPos = ((FixupAttachData7)p).dataPos;
-					dataSize = ((FixupAttachData7)p).dataSize;
-					dataUncomprSize = ((FixupAttachData7)p).dataUncomprSize;
+					recBlockSize = ((FixupAttachData8)p).recBlockSize;
+					dataPos = ((FixupAttachData8)p).dataPos;
+					dataSize = ((FixupAttachData8)p).dataSize;
+					dataUncomprSize = ((FixupAttachData8)p).dataUncomprSize;
 
-					initVector = ((FixupAttachData7)p).initVector;
-					dataHash = ((FixupAttachData7)p).dataHash;
+					initVector = ((FixupAttachData8)p).initVector;
+					dataHash = ((FixupAttachData8)p).dataHash;
 					
 					p = RemoveObject(prev, p);
 					continue;
@@ -250,12 +250,12 @@ class FixupAddObject7 extends FixupObject7 {
 
 
 //**************************************************************
-//*** FixupAttachAttributes7
+//*** FixupAttachAttributes8
 
 
-class FixupAttachAttributes7 extends FixupObject7 {
+class FixupAttachAttributes8 extends FixupObject8 {
 
-	FixupAttachAttributes7(Storage7 stor, Object7 obj) {
+	FixupAttachAttributes8(Storage8 stor, Object8 obj) {
 		super(stor, obj, FIXUP_RECORD_ATTACH_ATTRIBUTES);
 
 		if (obj.attrBlock != null && obj.attrBlock.length != 0)
@@ -263,14 +263,14 @@ class FixupAttachAttributes7 extends FixupObject7 {
 	}
 
 
-	FixupObject7 Reduce() {
-		FixupObject7 prev = this;
-		FixupObject7 p = next;
+	FixupObject8 Reduce() {
+		FixupObject8 prev = this;
+		FixupObject8 p = next;
 		
 		while (p != null) {
 			if (IsSameObject(p)) {
 				if (p.tag == FIXUP_RECORD_ATTACH_ATTRIBUTES) {		// Reduce
-					attrBlock = ((FixupAttachAttributes7)p).attrBlock;
+					attrBlock = ((FixupAttachAttributes8)p).attrBlock;
 					p = RemoveObject(prev, p);
 					continue;
 				}
@@ -312,12 +312,12 @@ class FixupAttachAttributes7 extends FixupObject7 {
 
 
 //**************************************************************
-//*** FixupAttachData7
+//*** FixupAttachData8
 
 
-class FixupAttachData7 extends FixupObject7 {
+class FixupAttachData8 extends FixupObject8 {
 
-	FixupAttachData7(Storage7 stor, Object7 obj) {
+	FixupAttachData8(Storage8 stor, Object8 obj) {
 		super(stor, obj, FIXUP_RECORD_ATTACH_DATA);
 
 		recBlockSize = obj.recBlockSize;
@@ -332,20 +332,20 @@ class FixupAttachData7 extends FixupObject7 {
 	}
 
 	
-	FixupObject7 Reduce() {
-		FixupObject7 prev = this;
-		FixupObject7 p = next;
+	FixupObject8 Reduce() {
+		FixupObject8 prev = this;
+		FixupObject8 p = next;
 		
 		while (p != null) {
 			if (IsSameObject(p)) {
 				if (p.tag == FIXUP_RECORD_ATTACH_DATA) {			// Reduce
-					recBlockSize = ((FixupAttachData7)p).recBlockSize;
-					dataPos = ((FixupAttachData7)p).dataPos;
-					dataSize = ((FixupAttachData7)p).dataSize;
-					dataUncomprSize = ((FixupAttachData7)p).dataUncomprSize;
+					recBlockSize = ((FixupAttachData8)p).recBlockSize;
+					dataPos = ((FixupAttachData8)p).dataPos;
+					dataSize = ((FixupAttachData8)p).dataSize;
+					dataUncomprSize = ((FixupAttachData8)p).dataUncomprSize;
 
-					initVector = ((FixupAttachData7)p).initVector;
-					dataHash = ((FixupAttachData7)p).dataHash;
+					initVector = ((FixupAttachData8)p).initVector;
+					dataHash = ((FixupAttachData8)p).dataHash;
 					
 					p = RemoveObject(prev, p);
 					continue;
@@ -396,19 +396,19 @@ class FixupAttachData7 extends FixupObject7 {
 
 
 //**************************************************************
-//*** FixupMoveObject7
+//*** FixupMoveObject8
 
 
-class FixupMoveObject7 extends FixupObject7 {
+class FixupMoveObject8 extends FixupObject8 {
 
-	FixupMoveObject7(Storage7 stor, Object7 obj) {
+	FixupMoveObject8(Storage8 stor, Object8 obj) {
 		super(stor, obj, FIXUP_RECORD_MOVE_OBJECT);
 	}
 
 
-	void SetTarget(Object7 obj) {
+	void SetTarget(Object8 obj) {
 		nTargetUids = 0;
-		Object7 ob = obj;
+		Object8 ob = obj;
 		do {
 			nTargetUids++;
 			ob = ob.parent;
@@ -450,12 +450,12 @@ class FixupMoveObject7 extends FixupObject7 {
 
 
 //**************************************************************
-//*** FixupDeleteObject7
+//*** FixupDeleteObject8
 
 
-class FixupDeleteObject7 extends FixupObject7 {
+class FixupDeleteObject8 extends FixupObject8 {
 
-	FixupDeleteObject7(Storage7 stor, Object7 obj) {
+	FixupDeleteObject8(Storage8 stor, Object8 obj) {
 		super(stor, obj, FIXUP_RECORD_DELETE_OBJECT);
 	}
 
@@ -467,12 +467,12 @@ class FixupDeleteObject7 extends FixupObject7 {
 
 
 //**************************************************************
-//*** FixupUndeleteObject7
+//*** FixupUndeleteObject
 
 
-class FixupUndeleteObject7 extends FixupObject7 {
+class FixupUndeleteObject extends FixupObject8 {
 
-	FixupUndeleteObject7(Storage7 stor, Object7 obj, boolean recursive) {
+	FixupUndeleteObject(Storage8 stor, Object8 obj, boolean recursive) {
 		super(stor, obj, FIXUP_RECORD_UNDELETE_OBJECT);
 		this.recursive = recursive;
 	}

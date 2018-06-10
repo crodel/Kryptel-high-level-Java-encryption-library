@@ -69,6 +69,10 @@ public final class Guids {
 
 	static public final UUID CID_HMAC													= UUID.fromString("11056249-400A-4461-BD5E-FE06113A10C1");
 	static public final UUID CID_CMAC													= UUID.fromString("11056249-400A-4461-BD5E-FE06113A10C2");
+	
+	// Key Manager
+
+	static public final UUID CID_KEY_MANAGER									= UUID.fromString("11056249-400A-4461-BD5E-FE06113A7001");
 
 	// Encrypted storage
 
@@ -76,7 +80,10 @@ public final class Guids {
 	static public final UUID CID_FIPS140_STORAGE							= UUID.fromString("11056249-400A-4461-BD5E-FE06113BA0B6");
 	
 	static public final UUID CID_STORAGE_7										= UUID.fromString("11056249-400A-4461-BD5E-FE06113BA007");
+	static public final UUID CID_STORAGE_8										= UUID.fromString("11056249-400A-4461-BD5E-FE06113BA008");
 	static public final UUID CID_FIPS140_STORAGE_7						= UUID.fromString("11056249-400A-4461-BD5E-FE06113BA0B7");
+	
+	static public final UUID CID_STORAGE											= CID_STORAGE_8;
 	
 	static public final UUID CID_FILE_AGENT										= UUID.fromString("11056249-400A-4461-BD5E-FE06113BC006");
 	static public final UUID CID_BACKUP_AGENT									= UUID.fromString("11056249-400A-4461-BD5E-FE06113BC016");
@@ -86,8 +93,11 @@ public final class Guids {
 	// Silver Key Encryption Engine
 
 	static public final UUID CID_SILVER_KEY_3									= UUID.fromString("11056249-400A-4461-BD5E-FE06113CA000");
-	static public final UUID CID_SILVER_KEY										= UUID.fromString("11056249-400A-4461-BD5E-FE06113CA001");
+	static public final UUID CID_SILVER_KEY_4									= UUID.fromString("11056249-400A-4461-BD5E-FE06113CA001");
+	static public final UUID CID_SILVER_KEY_5									= UUID.fromString("11056249-400A-4461-BD5E-FE06113CA002");
 	static public final UUID CID_SILVER_KEY_FIPS							= UUID.fromString("11056249-400A-4461-BD5E-FE06113CA008");
+	
+	static public final UUID CID_SILVER_KEY										= CID_SILVER_KEY_5;
 
 	static public final UUID CID_PARCEL_GUID									= UUID.fromString("11056249-400A-4461-BD5E-BC88BE020401");	// A non-component CID. See note on 'Parcel GUID' in parcel format specs
 

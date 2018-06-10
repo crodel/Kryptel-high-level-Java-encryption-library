@@ -103,7 +103,13 @@ class FileObject extends AgentObject implements IEncryptedFile {
 		bSparse = false;
 		fileSize = 0;
 		
-		return storageObject.CreateStream(path.getBytes("UnicodeLittleUnmarked"), uComprLevel);
+		byte[] bytePath = path.getBytes("UnicodeLittleUnmarked");
+		byte[] recBlock = Arrays.copyOf(IntAsBytes(-1), 4 + bytePath.length + 2);
+		System.arraycopy(bytePath, 0, recBlock, 4, bytePath.length);
+		recBlock[recBlock.length - 1] = 0;	// UTF-16 terminating zero
+		recBlock[recBlock.length - 2] = 0;
+		
+		return storageObject.CreateStream(recBlock, uComprLevel);
 	}
 
 

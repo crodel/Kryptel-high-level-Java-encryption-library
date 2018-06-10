@@ -34,6 +34,7 @@ import com.kryptel.IKryptelComponent;
 
 public final class ComponentLoader {
 	public static IKryptelComponent CreateComponent(UUID cid, long capabilities) throws Exception {
+		if (cid.equals(CID_STORAGE_8)) return new Storage8(capabilities);
 		if (cid.equals(CID_STORAGE_7)) return new Storage7(capabilities);
 		if (cid.equals(CID_FILE_AGENT)) return new FileAgent(capabilities);
 		if (cid.equals(CID_BACKUP_AGENT)) return new BackupAgent(capabilities);
@@ -43,6 +44,7 @@ public final class ComponentLoader {
 	
 	
 	public static void GetComponentList(List<UUID> uidList, long mask) {
+		if ((Storage8.componentType & mask) != 0) uidList.add(Storage8.componentID);
 		if ((Storage7.componentType & mask) != 0) uidList.add(Storage7.componentID);
 		if ((FileAgent.componentType & mask) != 0) uidList.add(FileAgent.componentID);
 		if ((BackupAgent.componentType & mask) != 0) uidList.add(BackupAgent.componentID);

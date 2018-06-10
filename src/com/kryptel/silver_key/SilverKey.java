@@ -27,7 +27,8 @@ package com.kryptel.silver_key;
 import static com.kryptel.Capabilities.CAP_DEFAULT_CAPABILITIES;
 import static com.kryptel.Constants.DEFAULT_BUFFER_SIZE;
 import static com.kryptel.Guids.CID_HASH_MD5;
-import static com.kryptel.Guids.CID_SILVER_KEY;
+import static com.kryptel.Guids.CID_SILVER_KEY_4;
+import static com.kryptel.Guids.CID_SILVER_KEY_5;
 import static com.kryptel.Guids.CID_SILVER_KEY_FIPS;
 import static com.kryptel.Guids.IID_IHashFunction;
 import static com.kryptel.bslx.Conversions.GetAsInt;
@@ -145,7 +146,7 @@ public final class SilverKey {
 			
 			parcelFile.read(buf);
 			guidEngine = UuidFromBytes(buf, 0);
-			if (!guidEngine.equals(CID_SILVER_KEY) && !guidEngine.equals(CID_SILVER_KEY_FIPS)) continue;
+			if (!guidEngine.equals(CID_SILVER_KEY_4) && !guidEngine.equals(CID_SILVER_KEY_5) && !guidEngine.equals(CID_SILVER_KEY_FIPS)) continue;
 			parcelFile.read(buf);
 			guidParcel = UuidFromBytes(buf, 0);
 			

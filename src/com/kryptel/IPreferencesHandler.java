@@ -1,8 +1,7 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          ComponentLoader.java
-  Description:   https://www.kryptel.com/articles/developers/java/intro.components.php
+  File:          IPreferencesHandler.java
 
   Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
 
@@ -21,28 +20,22 @@
 *******************************************************************************/
 
 
-package com.kryptel.silver_key;
+package  com.kryptel;
 
 
-import static com.kryptel.Guids.CID_SILVER_KEY_4;
-import static com.kryptel.Guids.CID_SILVER_KEY_5;
-
-import java.util.List;
-import java.util.UUID;
-
-import com.kryptel.IKryptelComponent;
-
-
-public final class ComponentLoader {
-	public static IKryptelComponent CreateComponent(UUID cid, long capabilities) throws Exception {
-		if (cid.equals(CID_SILVER_KEY_4)) return new Engine4(capabilities);
-		if (cid.equals(CID_SILVER_KEY_5)) return new Engine5(capabilities);
+public interface IPreferencesHandler {
+	
+	public void SetHandler(IPreferences handler);
+	
+	public interface IPreferences {
+		void SetInteger(String key, int val) throws Exception;
+		void SetString(String key, String str) throws Exception;
 		
-		return null;
-	}
-	
-	
-	public static void GetComponentList(List<UUID> uidList, long mask) {
-		if ((Engine4.componentType & mask) != 0) uidList.add(Engine4.componentID);
+		int GetInteger(String key, int defaultVal) throws Exception;
+		String GetString(String key, String defaultStr) throws Exception;
+		
+		void Remove(String key) throws Exception;
+		
+		void Flush() throws Exception;
 	}
 }

@@ -2,7 +2,7 @@
 
   Product:       Kryptel/Java
   File:          KeyRecord.java
-  Description:   https://www.kryptel.com/articles/developers/java/kryptel_api.keyrecord.php
+  Description:   https://www.kryptel.com/articles/developers/java/key.keyrecord.php
 
   Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
 
@@ -21,7 +21,7 @@
 *******************************************************************************/
 
 
-package com.kryptel;
+package com.kryptel.key;
 
 
 import static com.kryptel.Guids.NULL_GUID;

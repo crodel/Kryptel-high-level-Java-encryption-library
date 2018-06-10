@@ -30,7 +30,8 @@ public final class Message {
 		UserAbort, WrongKey, CompNotFound, UnsupportedCap, InvalidArg, InvalidState,
 		KeyMustBeSet, NotBlockSizeMultiple, InvalidCipherStreamHeader, InvalidCipherStream,
 		InvalidKeySize, InvalidBlockSize, InvalidRounds, MacBaseNotSet, InvalidMacBase,
-		EmptyPassword, UnsupportedKeyMaterial, InvalidKeyMaterial,
+		EmptyPassword, UnsupportedKeyMaterial, InvalidKeyMaterial, InsufficientKeyRights,
+		KeyForged, InvalidKeyFile,
 		FileExpected, FolderExpected, FileConflictingName, FolderConflictingName,
 		
 		// Kryptel errors
@@ -110,6 +111,9 @@ public final class Message {
 		MessageList[Code.EmptyPassword.ordinal()] = "Empty password is not allowed.";
 		MessageList[Code.UnsupportedKeyMaterial.ordinal()] = "Unsupported key material.";
 		MessageList[Code.InvalidKeyMaterial.ordinal()] = "Invalid key material requested.";
+		MessageList[Code.InsufficientKeyRights.ordinal()] = "The provided key does not have the right to perform the requested operation.";
+		MessageList[Code.KeyForged.ordinal()] = "The container's or the parcel's key block is forged.";
+		MessageList[Code.InvalidKeyFile.ordinal()] = "Invalid binary key file.";
 		MessageList[Code.FileExpected.ordinal()] = "Folder specified but a file is expected.";
 		MessageList[Code.FolderExpected.ordinal()] = "File specified but a folder is expected.";
 		MessageList[Code.FileConflictingName.ordinal()] = "Can't create file because directory with such name already exists.";

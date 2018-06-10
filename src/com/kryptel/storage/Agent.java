@@ -33,13 +33,13 @@ import java.util.UUID;
 
 import com.kryptel.IComponentCapabilities;
 import com.kryptel.IComponentState;
-import com.kryptel.IKeyCallback;
 import com.kryptel.IKryptelComponent;
 import com.kryptel.Loader;
 import com.kryptel.Message;
 import com.kryptel.cipher.CipherParameters;
 import com.kryptel.compressor.CompressorParameters;
 import com.kryptel.hash_function.HashFunctionParameters;
+import com.kryptel.key.IKeyCallback;
 import com.kryptel.storage.IEncryptedStorage.CONTAINER_COMPRESSION_STRATEGY;
 
 

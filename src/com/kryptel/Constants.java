@@ -32,7 +32,7 @@ public final class Constants {
 	static public final int BINARY_KEY_SIZE = 512;
 	static public final int MAX_PASSWORD_LENGTH = (BINARY_KEY_SIZE / 2) - 1;	// UTF-16 zero-terminated string fitting in BINARY_KEY_SIZE
 
-	static public final int VERIFICATION_LOOP_COUNT = 200;		// Default number of password verification passes
+	static public final int VERIFICATION_LOOP_COUNT = 200;		// Default number of password verification passes (pre-v8)
 
 	// Component types (upper 4 bits have special meaning)
 
@@ -79,6 +79,7 @@ public final class Constants {
 	static public final int ESTOR_DISCARD_CHANGES						= 0x00800000;
 	static public final int ESTOR_YUBIKEY										= 0x01000000;			// Storage supports Yubikey
 	static public final int ESTOR_PROTECTED_KEY							= 0x02000000;			// Storage supports protected binary keys
+	static public final int ESTOR_KEY_BLOCK									= 0x04000000;			// Storage supports Kryptel 8 key blocks
 	static public final int ESTOR_STATISTICS								= 0x10000000;
 	static public final int ESTOR_KEEPS_DELETED_OBJECTS			= 0x20000000;			// Handler does not physically removes deleted objects, just sets EFL_OBJECT_DELETED flag
 	static public final int ESTOR_CAN_UNDELETE							= 0x40000000;			// If this flag is set, ESTOR_KEEPS_DELETED_OBJECTS must also be set

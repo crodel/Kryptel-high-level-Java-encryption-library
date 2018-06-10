@@ -2,7 +2,7 @@
 
   Product:       Kryptel/Java
   File:          IKeyCallback.java
-  Description:   https://www.kryptel.com/articles/developers/java/kryptel_api.ikeycallback.php
+  Description:   https://www.kryptel.com/articles/developers/java/key.ikeycallback.php
 
   Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
 
@@ -21,13 +21,18 @@
 *******************************************************************************/
 
 
-package com.kryptel;
+package com.kryptel.key;
 
 
 import java.util.UUID;
 
 
 public interface IKeyCallback {
+	
+	//
+	// Legacy (pre- Kryptel 8 / Silver Key 5) methods
+	//
+	
 	// Allowed key material
 	static final int USER_DEFINED_KEY						= 0x00000001;	// User-defined raw binary key
 	static final int FILE_BASED_KEY							= 0x00000002;
@@ -53,4 +58,19 @@ public interface IKeyCallback {
 	//
 	
 	KeyRecord Callback(Object arg, String prompt, int allowed, UUID expected) throws Exception;		// Returns null if user requested abort
+	
+	
+	//
+	// New Kryptel 8+ / Silver Key 5+ methods
+	//
+	
+	final class KeyData {
+		public byte flags;
+		public byte[] baseKey;
+		public byte[] keyRecord;
+	}
+	
+	KeyData EncryptionKeyCallback(Object arg, String prompt, KeyBlock.ComponentDescriptor desc) throws Exception;
+	
+	KeyData DecryptionKeyCallback(Object arg, String prompt, byte[] keyRecord, KeyBlock.ComponentDescriptor desc) throws Exception;
 }

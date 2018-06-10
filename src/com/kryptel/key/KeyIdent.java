@@ -21,7 +21,7 @@
 *******************************************************************************/
 
 
-package com.kryptel;
+package com.kryptel.key;
 
 
 import java.util.UUID;

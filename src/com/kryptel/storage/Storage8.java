@@ -1,9 +1,9 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          Storage7.java
+  File:          Storage8.java
 
-  Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
+  Copyright (c) 2018 Inv Softworks LLC,    http://www.kryptel.com
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -23,11 +23,12 @@
 package com.kryptel.storage;
 
 
-import static com.kryptel.ApiHelpers.*;
 import static com.kryptel.Capabilities.*;
 import static com.kryptel.Constants.*;
 import static com.kryptel.Guids.*;
 import static com.kryptel.bslx.Conversions.*;
+import static com.kryptel.key.KeyBlock.*;
+import static com.kryptel.key.KeyUtils.*;
 import static com.kryptel.key.KeyIdent.*;
 import static com.kryptel.storage.Kryptel.*;
 
@@ -42,19 +43,16 @@ import com.kryptel.*;
 import com.kryptel.bslx.*;
 import com.kryptel.cipher.*;
 import com.kryptel.compressor.*;
-import com.kryptel.exceptions.UserAbortException;
 import com.kryptel.hash_function.*;
 import com.kryptel.key.IKeyCallback;
-import com.kryptel.key.KeyIdent;
-import com.kryptel.key.KeyRecord;
 import com.kryptel.mac.IMacSetup;
 
 
-final class Storage7 implements IKryptelComponent,
+final class Storage8 implements	IKryptelComponent,
 																IComponentCapabilities,
 																IComponentState,
 																IEncryptedStorage {
-	Storage7(long capabilities) throws Exception {
+	Storage8(long capabilities) throws Exception {
 		compCapabilities = capabilities;
 
 		rand = new SecureRandom();
@@ -68,7 +66,7 @@ final class Storage7 implements IKryptelComponent,
 	
 	public long ComponentType() { return componentType; }
 	public UUID ComponentID() { return componentID; }
-	public String ComponentName() { return "Kryptel 7 Legacy Storage"; }
+	public String ComponentName() { return "Kryptel 8 Storage"; }
 	
 	public Object GetInterface(UUID iid) {
 		if (iid.equals(IID_IKryptelComponent) || iid.equals(IID_IComponentCapabilities) || iid.equals(IID_IComponentState)) return this;
@@ -99,7 +97,7 @@ final class Storage7 implements IKryptelComponent,
 	public void Reset() throws Exception { Cleanup(); }
 
 	public IKryptelComponent Clone() throws Exception {
-		return new Storage7(compCapabilities);
+		return new Storage8(compCapabilities);
 	}
 	
 	
@@ -163,47 +161,27 @@ final class Storage7 implements IKryptelComponent,
 			hashFunctionParamBlock = new HashFunctionParameters(hashFunctionParams.GetHashSize(), hashFunctionParams.GetPasses(), hashFunctionParams.GetScheme());
 			hashFunctionScheme = hashFunctionParams.GetInfo().Schemes[hashFunctionParamBlock.hashScheme - 1];
 			
-			bHeaderAvailable = true;
-			
 			// Get key
 			
-			int keyLen;
-			keyRecord =  keyFunc.Callback(arg, cf.getName(), IKeyCallback.PASSWORDS | IKeyCallback.KEY_FILES, IDENT_NULL);
-			if (keyRecord == null) throw new UserAbortException();
-			if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PASSWORD)
-					|| keyRecord.keyMaterial.equals(KeyIdent.IDENT_LOWERCASE_PASSWORD)
-					|| keyRecord.keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) {
-				ConvertPassword(keyRecord, hashFunctionComp);
-				keyLen = hashFunctionParamBlock.hashSize;
-			}
-			else {
-				assert ExpectedKeyMaterial(keyRecord.keyMaterial) == IKeyCallback.BINARY_KEY;
-				keyLen = BINARY_KEY_SIZE;
-			}
+			IKeyCallback.KeyData keyData = keyFunc.EncryptionKeyCallback(arg, cf.getName(),
+					FillComponentDescriptor(this.cipherComp, cipherParams, this.hashFunctionComp, hashFunctionParams));
+			if ((keyData.flags & PASSWORD_CAN_CREATE) == 0)  throw new Exception(Message.Get(Message.Code.InsufficientKeyRights));
+			keyFlags = keyData.flags;
+			keyBlock = keyData.keyRecord;
+			encryptionKey = DeriveEncryptionKey(keyData.baseKey, cipherParams.GetKeySize());
+			hmacKey = DeriveHmacKey(keyData.baseKey);
+			initVector = DeriveInitVector(keyData.baseKey, cipherParamBlock.cipherBlockSize);
+
+			cipherParams.SetKey(encryptionKey, 0, encryptionKey.length);
+			rawCipher.EncryptBlock(initVector, 0, initVector, 0);
+			cipherParams.SetInitVector(initVector, 0, cipherParamBlock.cipherBlockSize);
+
+			hmacSetup.SetKey(hmacKey, 0, hmacKey.length);
+			keyBlockHmac = blockHmac.HashBlock(keyBlock, 0, keyBlock.length);
 			
-			if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) {
-				cipherParams.SetKey(keyRecord.keyData, 0, keyRecord.keyData.length);
-				cipherParams.SetInitVector(Conversions.UuidToBytes(keyRecord.keyAssociatedMaterial), 0, 16);
-				int mode = cipherParams.GetChainingMode();
-				cipherParams.SetChainingMode(IBlockCipherParams.MODE_CBC);
-				blockCipher.Init();
-				blockCipher.Encrypt(keyRecord.keyAssociatedData, 0, BINARY_KEY_SIZE);
-				blockCipher.Done();
-				cipherParams.SetChainingMode(mode);
-				
-				cipherParams.SetKey(keyRecord.keyAssociatedData, 0, hashFunctionParamBlock.hashSize);
-			}
-			else
-				cipherParams.SetKey(keyRecord.keyData, 0, hashFunctionParamBlock.hashSize);
-			
-			SetupHmac(keyRecord, keyLen);
-			verificationPasses = VERIFICATION_LOOP_COUNT;
-			keyVerificator = ComputeVerificator(verificationPasses);
-			
+			BuildTrailer();
+
 			// Finish creation
-			
-			initVector = new byte [cipherParamBlock.cipherBlockSize];
-			rand.nextBytes(initVector);
 			
 			contAgent = agent;
 			
@@ -211,7 +189,7 @@ final class Storage7 implements IKryptelComponent,
 			bReadOnly = false;
 			bModified = true;
 			
-			rootObject = new Object7(this, null, null);
+			rootObject = new Object8(this, null, null);
 			statistics.nObjects = 1;
 		}
 		catch (Exception e) {
@@ -287,27 +265,18 @@ final class Storage7 implements IKryptelComponent,
 			cipherParamBlock = new CipherParameters(GetAsInt(header, 90), GetAsInt(header, 94), GetAsInt(header, 98), (byte)GetAsInt(header, 102), GetAsInt(header, 106));
 			compressorParamBlock = new CompressorParameters(DEFAULT_COMPRESSION_LEVEL, (byte)GetAsInt(header, 110));
 			hashFunctionParamBlock = new HashFunctionParameters(GetAsInt(header, 114), GetAsInt(header, 118), (byte)GetAsInt(header, 122));
-			
-			keyMaterial = UuidFromBytes(header, 126);
-			int asLen = GetAsShort(header, 142);
 
-			int pos = 144;
+			int pos = 126;
 			
-			if (keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) {
-				if (asLen != 16) throw new Exception(Message.Get(Message.Code.InvalidContainer));
-				keyAssociatedMaterial = UuidFromBytes(header, pos);
-				pos += 16;
-			}
-			else if (!keyMaterial.equals(KeyIdent.IDENT_PASSWORD)
-						&& !keyMaterial.equals(KeyIdent.IDENT_LOWERCASE_PASSWORD)
-						&& ExpectedKeyMaterial(keyMaterial) != IKeyCallback.BINARY_KEY) throw new Exception(Message.Get(Message.Code.UnsupportedKeyMaterial));
-			else {
-				assert asLen == 0;
-			}
+			// Key block
 			
-			verificationPasses = GetAsInt(header, pos);
-			pos += 4;
-			keyVerificator = Arrays.copyOfRange(header, pos, pos + hashFunctionParamBlock.hashSize);
+			int kbLen = GetAsShort(header, pos);
+			pos += 2;
+			keyBlock = new byte [kbLen];
+			System.arraycopy(header, pos, keyBlock, 0, kbLen);
+			pos += kbLen;
+			keyBlockHmac = new byte [hashFunctionParamBlock.hashSize];
+			System.arraycopy(header, pos, keyBlockHmac, 0, hashFunctionParamBlock.hashSize);
 			pos += hashFunctionParamBlock.hashSize;
 			
 			// Agent data
@@ -331,8 +300,6 @@ final class Storage7 implements IKryptelComponent,
 			pos += 6;
 			statistics.uDirectorySize = directorySize;
 			
-			int diriv = pos;
-			pos += cipherParamBlock.cipherBlockSize;
 			int dirhm = pos;
 			pos += hashFunctionParamBlock.hashSize;
 	
@@ -353,8 +320,6 @@ final class Storage7 implements IKryptelComponent,
 			len = GetAsShort(header, pos) * 2; pos += 2;
 			hashFunctionScheme =  new String(header, pos, len, "UnicodeLittleUnmarked"); pos += len;
 			
-			bHeaderAvailable = true;
-			
 			// Instantiate and setup components
 			
 			SetupComponents(cipherID, compressorID, hashFunctionID);
@@ -373,45 +338,34 @@ final class Storage7 implements IKryptelComponent,
 			
 			// Get key
 			
-			bTestPasswordContext = true;
-			if (keyRecord != null) keyRecord.clear();
-			keyRecord = keyFunc.Callback(arg,
-																	 cf.getName(),
-																	 ExpectedKeyMaterial(keyMaterial),
-																	 (keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) ? keyAssociatedMaterial : keyMaterial);
-			bTestPasswordContext = false;
-			if (keyRecord == null) throw new UserAbortException();
-	
-			int keyLen;
-			if (keyRecord == null) throw new UserAbortException();
-			if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PASSWORD)
-					|| keyRecord.keyMaterial.equals(KeyIdent.IDENT_LOWERCASE_PASSWORD)
-					|| keyRecord.keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) {
-				ConvertPassword(keyRecord, hashFunctionComp);
-				keyLen = hashFunctionParamBlock.hashSize;
-			}
-			else {
-				assert ExpectedKeyMaterial(keyRecord.keyMaterial) == IKeyCallback.BINARY_KEY;
-				keyLen = BINARY_KEY_SIZE;
+			IKeyCallback.KeyData keyData = keyFunc.DecryptionKeyCallback(arg, cf.getName(), keyBlock,
+					FillComponentDescriptor(cipherComp, cipherParams, hashFunctionComp, hashFunctionParams));
+			keyFlags = keyData.flags;
+			encryptionKey = DeriveEncryptionKey(keyData.baseKey, cipherParams.GetKeySize());
+			hmacKey = DeriveHmacKey(keyData.baseKey);
+			initVector = DeriveInitVector(keyData.baseKey, cipherParamBlock.cipherBlockSize);
+
+			cipherParams.SetKey(encryptionKey, 0, encryptionKey.length);
+			rawCipher.EncryptBlock(initVector, 0, initVector, 0);
+			cipherParams.SetInitVector(initVector, 0, cipherParamBlock.cipherBlockSize);
+			
+			// Check key block validity
+			
+			hmacSetup.SetKey(hmacKey, 0, hmacKey.length);
+			if (!Arrays.equals(keyBlockHmac, blockHmac.HashBlock(keyBlock, 0, kbLen))) throw new Exception(Message.Get(Message.Code.KeyForged));
+			
+			// Check key access rights
+			
+			if ((keyFlags & PASSWORD_CAN_DECRYPT) == 0) throw new Exception(Message.Get(Message.Code.InsufficientKeyRights));
+			if (!bReadOnly && (keyFlags & PASSWORD_CAN_MODIFY) == 0) {
+				if (contMode == CONTAINER_ACCESS_MODE.CONT_READ_WRITE) throw new Exception(Message.Get(Message.Code.InsufficientKeyRights));
+				assert contMode == CONTAINER_ACCESS_MODE.CONT_ANY;
+				contFile.close();
+				contFile = new RandomAccessFile(cf, "r");
+				bReadOnly = true;
 			}
 			
-			if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) {
-				cipherParams.SetKey(keyRecord.keyData, 0, keyRecord.keyData.length);
-				cipherParams.SetInitVector(Conversions.UuidToBytes(keyRecord.keyAssociatedMaterial), 0, 16);
-				int cmode = cipherParams.GetChainingMode();
-				cipherParams.SetChainingMode(IBlockCipherParams.MODE_CBC);
-				blockCipher.Init();
-				blockCipher.Encrypt(keyRecord.keyAssociatedData, 0, BINARY_KEY_SIZE);
-				blockCipher.Done();
-				cipherParams.SetChainingMode(cmode);
-				
-				cipherParams.SetKey(keyRecord.keyAssociatedData, 0, hashFunctionParamBlock.hashSize);
-			}
-			else
-				cipherParams.SetKey(keyRecord.keyData, 0, hashFunctionParamBlock.hashSize);
-			
-			SetupHmac(keyRecord, keyLen);
-			if (!Arrays.equals(keyVerificator, ComputeVerificator(verificationPasses))) throw new Exception(Message.Get(Message.Code.WrongKey));
+			BuildTrailer();
 	
 			// Read agent data
 			
@@ -426,19 +380,17 @@ final class Storage7 implements IKryptelComponent,
 			
 			// Read directory
 			
-			initVector = new byte [cipherParamBlock.cipherBlockSize];
-			rawCipher.EncryptBlock(initVector, 0, header, diriv);
 			LoadDirectory(Arrays.copyOfRange(header, dirhm, dirhm + hashFunctionParamBlock.hashSize));
 			
 			if (GetAsShort(dirBuffer.Retrieve(2), 0) != OBJECT_START) throw new Exception(Message.Get(Message.Code.InvalidContainer));
-			rootObject = new Object7(this, null, null);
+			rootObject = new Object8(this, null, null);
 			rootObject.LoadObject();
 			
 			assert contFile.getFilePointer() == (directoryPos + directorySize);
 			
 			// Loading fixup segments
 			
-			segmentStart = directoryPos + directorySize + headerSize + CONTAINER_TRAILER_SIZE + (ALIGNMENT_BOUNDARY - 1);
+			segmentStart = directoryPos + directorySize + headerSize + trailer.length + (ALIGNMENT_BOUNDARY - 1);
 			segmentStart &= ~(ALIGNMENT_BOUNDARY - 1);
 			if (fileSize < segmentStart) throw new Exception(Message.Get(Message.Code.InvalidContainerSize));
 
@@ -446,7 +398,7 @@ final class Storage7 implements IKryptelComponent,
 
 			contFile.seek(segmentStart);
 			
-			segmentHeaderSize = (2 * 4 + 6 + hashFunctionParamBlock.hashSize + 6 + cipherParamBlock.cipherBlockSize + hashFunctionParamBlock.hashSize + 16);
+			segmentHeaderSize = (2 * 4 + 6 + hashFunctionParamBlock.hashSize + 6 + hashFunctionParamBlock.hashSize + 4 * 16);
 			
 			long lastSegmentStart;
 			
@@ -461,14 +413,14 @@ final class Storage7 implements IKryptelComponent,
 				}
 				
 				else if (tag == FIXUP_TAG) {
-					if (fileSize < (segmentStart + segmentHeaderSize + FIXUP_SEGMENT_TRAILER_SIZE)) throw new Exception(Message.Get(Message.Code.InvalidContainerSize));
+					if (fileSize < (segmentStart + segmentHeaderSize + trailer.length)) throw new Exception(Message.Get(Message.Code.InvalidContainerSize));
 
 					lastSegmentStart = segmentStart;
 					statistics.nFixupSegments++;
 					
 					LoadSegment();
 					
-					segmentStart = contFile.getFilePointer() + FIXUP_SEGMENT_TRAILER_SIZE + (ALIGNMENT_BOUNDARY - 1);
+					segmentStart = contFile.getFilePointer() + trailer.length + (ALIGNMENT_BOUNDARY - 1);
 					segmentStart &= ~(ALIGNMENT_BOUNDARY - 1);
 					if (fileSize < segmentStart) throw new Exception(Message.Get(Message.Code.InvalidContainerSize));
 					contFile.seek(segmentStart);
@@ -553,7 +505,7 @@ final class Storage7 implements IKryptelComponent,
 			// Copy streams to the new file
 			
 			rootObject.MoveDataStreams();
-			System.arraycopy(newMD5.digest(), 0, trailer, 34, 16);
+			System.arraycopy(newMD5.digest(), 0, header, header.length - 64, 16);
 				
 			// Save agent data
 
@@ -562,16 +514,15 @@ final class Storage7 implements IKryptelComponent,
 			agentDataPos = nextDataPos;
 			newFile.seek(agentDataPos);
 			System.arraycopy(LongAsBytes(agentDataPos), 0, header, hdrAgentDataPos + 4, 6);
-			System.arraycopy(header, hdrAgentDataPos + 4, trailer, 6, 6);
 			if (agentData != null) {
 				System.arraycopy(blockHmac.HashBlock(agentData, 0, agentData.length), 0, header, hdrAgentDataPos + 10, hashFunctionParamBlock.hashSize);
 				newMD5.reset();
-				System.arraycopy(newMD5.digest(agentData), 0, trailer, 50, 16);
+				System.arraycopy(newMD5.digest(agentData), 0, header, header.length - 48, 16);
 				newFile.write(agentData, 0, agentData.length);
 			}
 			else {
 				Arrays.fill(header, hdrAgentDataPos + 10, hdrAgentDataPos + 10 + hashFunctionParamBlock.hashSize, (byte)0);
-				Arrays.fill(trailer, 50, 50 + 16, (byte)0);
+				Arrays.fill(header, header.length - 48, header.length - 32, (byte)0);
 			}
 			nextDataPos += asize;
 					
@@ -589,8 +540,8 @@ final class Storage7 implements IKryptelComponent,
 				rootObject.StoreObject();
 				
 				compressor.Done();
-				System.arraycopy(hmacFunc.Done(), 0, header, hdrDirDataPos + 6 + cipherParamBlock.cipherBlockSize, hashFunctionParamBlock.hashSize);
-				System.arraycopy(newMD5.digest(), 0, trailer, 66, 16);
+				System.arraycopy(hmacFunc.Done(), 0, header, hdrDirDataPos + 6, hashFunctionParamBlock.hashSize);
+				System.arraycopy(newMD5.digest(), 0, header, header.length - 32, 16);
 			}
 			catch (Exception e) {
 				cipherState.Reset();
@@ -601,26 +552,17 @@ final class Storage7 implements IKryptelComponent,
 			nextDataPos = newFile.getFilePointer();
 			long dirSize = nextDataPos - directoryPos;
 			System.arraycopy(LongAsBytes(dirSize), 0, header, hdrDirDataPos, 6);
-			System.arraycopy(header, hdrDirDataPos, trailer, 12, 6);
 
-			// Header is complete - compute its MD5 checksum and write both copies
+			// Header is complete - compute its MD5 checksum and write
 			newMD5.reset();
 			newMD5.update(header, 0, header.length - 16);
 			newMD5.digest(header, header.length - 16, 16);
 			newFile.seek(0);
 			newFile.write(header, 0, header.length);
 			newFile.seek(nextDataPos);
-			newFile.write(header, 0, header.length);
 					
-			// Complete trailer and write it
-			IntAsBytes(TRAILER_TAG, trailer, 0);
-			IntAsBytes(header.length, trailer, 4);
-			System.arraycopy(header, header.length - 16, trailer, 18, 16);
-			
-			newMD5.reset();
-			newMD5.update(trailer, 0, CONTAINER_TRAILER_SIZE - 16);
-			newMD5.digest(trailer, CONTAINER_TRAILER_SIZE - 16, 16);
-			newFile.write(trailer, 0, CONTAINER_TRAILER_SIZE);
+			// Write trailer
+			newFile.write(trailer, 0, trailer.length);
 					
 			WriteAlignmentData();
 					
@@ -681,11 +623,10 @@ final class Storage7 implements IKryptelComponent,
 	
 	
   static long componentType = TYPE_STORAGE_HANDLER;
-  static UUID componentID = CID_STORAGE_7;
+  static UUID componentID = CID_STORAGE_8;
 
-  private static short CONT_CUR_VERSION							= 0x0200;
+  private static short CONT_CUR_VERSION							= 0x0100;
   private static short CONT_REQ_VERSION							= 0x0100;
-  private static short CONT_REQ_KEYPROT_VERSION			= 0x010C;
   
   private static int MIN_HEADER_SIZE = 200;			// Very approximate value for first validity check during open
   
@@ -701,12 +642,11 @@ final class Storage7 implements IKryptelComponent,
 	
 	long nextDataPos;
 	
-	boolean bHeaderAvailable;
 	private byte[] header;
 	private int hdrAgentDataPos;
 	private int hdrDirDataPos;
 	
-	private byte[] trailer = new byte [Math.max(CONTAINER_TRAILER_SIZE, FIXUP_SEGMENT_TRAILER_SIZE)];
+	private byte[] trailer;
 	
 	boolean bReadOnly = false;
 	boolean bModified = false;
@@ -718,7 +658,7 @@ final class Storage7 implements IKryptelComponent,
 	private StorageInfo storageInfo;
 	StorageStatistics statistics;
 	
-	Object7 rootObject;
+	Object8 rootObject;
 	
 	private UUID contAgent;
 	private byte[] agentData;
@@ -738,15 +678,14 @@ final class Storage7 implements IKryptelComponent,
 	
 	private CONTAINER_COMPRESSION_STRATEGY compressionStrategy = DEFAULT_COMPRESSION_STRATEGY;
 	
-	private KeyRecord keyRecord;
-	private UUID keyMaterial;
-	private UUID keyAssociatedMaterial;
-	private boolean bTestPasswordContext = false;
-	private int verificationPasses;
-	private byte[] keyVerificator;
-	private byte[] keyAssocDataCopy;
+	private byte keyFlags;
+	private byte[] keyBlock;
+	private byte[] encryptionKey;
+	private byte[] hmacKey;
+	
+	private byte[] keyBlockHmac;
 
-	FixupObject7 fixupList, fixupListTail;
+	FixupObject8 fixupList, fixupListTail;
 	
 	//
 	// Components used
@@ -851,13 +790,13 @@ final class Storage7 implements IKryptelComponent,
 			hmacComp.DiscardComponent();
 			hmacComp = null;
 		}
-		if (keyRecord != null) {
-			keyRecord.clear();
-			keyRecord = null;
+		if (encryptionKey != null) {
+			Arrays.fill(encryptionKey, (byte)0);
+			encryptionKey = null;
 		}
-		if (keyAssocDataCopy != null) {
-			Arrays.fill(keyAssocDataCopy, (byte)0);
-			keyAssocDataCopy = null;
+		if (hmacKey != null) {
+			Arrays.fill(hmacKey, (byte)0);
+			hmacKey = null;
 		}
 		if (initVector != null) {
 			Arrays.fill(initVector, (byte)0);
@@ -875,43 +814,18 @@ final class Storage7 implements IKryptelComponent,
 		statistics = null;
 		rootObject = null;
 		agentData = null;
-		keyVerificator = null;
+		keyFlags = 0;
+		keyBlock = null;
+		keyBlockHmac = null;
 		dirHmac = null;
 		header = null;
-		bHeaderAvailable = false;
+		trailer = null;
 		bStreamActive = false;;
 		dirBuffer.Empty();
 		storageInfo = null;
 		
 		fixupList = null;
 		fixupListTail = null;
-	}
-	
-	
-	private void SetupHmac(KeyRecord keyRecord, int keyLen) throws Exception {
-		assert (keyRecord.keyData.length >= keyLen && keyLen > 0 && keyLen <= BINARY_KEY_SIZE);
-		byte[] hmacKey = new byte [BINARY_KEY_SIZE];
-		Arrays.fill(hmacKey, (byte)0);
-		for (int i = 0, j = keyLen; i < keyLen; ) hmacKey[i++] = (byte)(~keyRecord.keyData[--j]);
-		hmacSetup.SetKey(hmacKey, 0, 512 / 8);
-	}
-	
-	
-	private byte[] ComputeVerificator(int nCounts) throws Exception {
-		byte[] keyVerificator = new byte [hmacParams.GetHashSize()];
-
-		int[] verArray = new int [nCounts];
-		byte[] verBytes = new byte [nCounts * 4];
-		
-		for (int i = 0; i < nCounts; i++) {
-			verArray[i] = i;
-			Conversions.ToBytes(verBytes, 0, verArray, 0, (i + 1) * 4);
-			hmacFunc.Init();
-			hmacFunc.Hash(verBytes, 0, (i + 1) * 4);
-			hmacFunc.Hash(keyVerificator, 0, keyVerificator.length);
-			keyVerificator = hmacFunc.Done();
-		}
-		return keyVerificator;
 	}
 	
 	
@@ -968,7 +882,7 @@ final class Storage7 implements IKryptelComponent,
 		SmartBuffer sbuf = new SmartBuffer();
 		
 		sbuf.Store(ShortAsBytes(CONT_CUR_VERSION));
-		sbuf.Store(ShortAsBytes((keyRecord.keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) ? CONT_REQ_KEYPROT_VERSION : CONT_REQ_VERSION));
+		sbuf.Store(ShortAsBytes(CONT_REQ_VERSION));
 		
 		sbuf.Store(UuidToBytes(componentID));
 		sbuf.Store(UuidToBytes(contAgent));
@@ -987,20 +901,10 @@ final class Storage7 implements IKryptelComponent,
 		sbuf.Store(IntAsBytes(hashFunctionParamBlock.hashSize));
 		sbuf.Store(IntAsBytes(hashFunctionParamBlock.hashPasses));
 		sbuf.Store(IntAsBytes(hashFunctionParamBlock.hashScheme));
-		
-		sbuf.Store(UuidToBytes(keyRecord.keyMaterial));
-		if (keyAssocDataCopy != null) {		// Saved associated data present (probably compressing existing container)
-			sbuf.Store(ShortAsBytes((short)keyAssocDataCopy.length));
-			sbuf.Store(keyAssocDataCopy);
-		}
-		else if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PROTECTED_KEY)) {
-			sbuf.Store(ShortAsBytes((short)16));
-			sbuf.Store(UuidToBytes(keyRecord.keyAssociatedMaterial));
-		}
-		else		// No associated data
-			sbuf.Store(ShortAsBytes((short)0));
-		sbuf.Store(IntAsBytes(verificationPasses));
-		sbuf.Store(keyVerificator);
+
+		sbuf.Store(ShortAsBytes((short)keyBlock.length));
+		sbuf.Store(keyBlock);
+		sbuf.Store(keyBlockHmac);
 		
 		// Nothing is known about agent data yet, just save the header position
 		hdrAgentDataPos = 4 + 2 + sbuf.Size();		// Two first fields will be added later
@@ -1010,9 +914,6 @@ final class Storage7 implements IKryptelComponent,
 		// Directory
 		hdrDirDataPos = 4 + 2 + sbuf.Size();		// Two first fields will be added later
 		sbuf.Store(dummy, 0, 6);								// Skip directory size field
-		byte[] iv = new byte [cipherParamBlock.cipherBlockSize];
-		rawCipher.DecryptBlock(iv, 0, initVector, 0);
-		sbuf.Store(iv);
 		sbuf.Store(dummy, 0, hashFunctionParamBlock.hashSize);	// Skip directory HMAC field
 		
 		// Store strings
@@ -1023,11 +924,44 @@ final class Storage7 implements IKryptelComponent,
 		sbuf.Store(ShortAsBytes((short)hashFunctionName.length())); sbuf.Store(hashFunctionName.getBytes("UnicodeLittleUnmarked"));
 		sbuf.Store(ShortAsBytes((short)hashFunctionScheme.length())); sbuf.Store(hashFunctionScheme.getBytes("UnicodeLittleUnmarked"));
 
-		int headerSize = sbuf.Size() + 4 + 2 + 16;			// buffer size + two first fields + MD5 hash
+		int headerSize = sbuf.Size() + 4 + 2 + 4 * 16;			// buffer size + two first fields + MD5 hashes
 		sbuf.Unretrieve(ShortAsBytes((short)headerSize), 0, 2);	// Push header size
 		sbuf.Unretrieve(IntAsBytes(CONTAINER_TAG), 0, 4);
 		header = new byte [headerSize];
 		sbuf.Retrieve(header, 0, sbuf.Size());
+	}
+
+	
+	private void BuildTrailer() throws Exception {
+		int trailerSize = 92 + keyBlock.length + hashFunctionParamBlock.hashSize + 16;
+		trailer = new byte [trailerSize];
+		IntAsBytes(TRAILER_V8_TAG, trailer, 0);
+		ShortAsBytes((short)trailerSize, trailer, 4);
+		UuidToBytes(trailer, 6, cipherID);
+		UuidToBytes(trailer, 22, compressorID);
+		UuidToBytes(trailer, 38, hashFunctionID);
+		
+		IntAsBytes(cipherParamBlock.cipherKeySize, trailer, 54);
+		IntAsBytes(cipherParamBlock.cipherBlockSize, trailer, 58);
+		IntAsBytes(cipherParamBlock.cipherRounds, trailer, 62);
+		IntAsBytes(cipherParamBlock.cipherScheme, trailer, 66);
+		IntAsBytes(cipherParamBlock.cipherMode, trailer, 70);
+		
+		IntAsBytes(compressorParamBlock.compressorScheme, trailer, 74);
+		
+		IntAsBytes(hashFunctionParamBlock.hashSize, trailer, 78);
+		IntAsBytes(hashFunctionParamBlock.hashPasses, trailer, 82);
+		IntAsBytes(hashFunctionParamBlock.hashScheme, trailer, 86);
+	
+		ShortAsBytes((short)keyBlock.length, trailer, 90);
+		System.arraycopy(keyBlock, 0, trailer, 92, keyBlock.length);
+		System.arraycopy(keyBlockHmac, 0, trailer, 92 + keyBlock.length, hashFunctionParamBlock.hashSize);
+	
+		assert (92 + keyBlock.length + hashFunctionParamBlock.hashSize) == (trailer.length - 16);
+		MessageDigest md5 = MessageDigest.getInstance("MD5");
+		md5.reset();
+		md5.update(trailer, 0, trailer.length - 16);
+		md5.digest(trailer, trailer.length - 16, 16);
 	}
 	
 	
@@ -1049,7 +983,6 @@ final class Storage7 implements IKryptelComponent,
 	
 	private void LoadDirectory(byte[] hmac) throws Exception {
 		contFile.seek(directoryPos);
-		cipherParams.SetInitVector(initVector, 0, cipherParamBlock.cipherBlockSize);
 		cipher.Init(new DirDecryptSink(), null);
 
 		long dirsize = directorySize;
@@ -1101,7 +1034,7 @@ final class Storage7 implements IKryptelComponent,
 		else if (agentDataSize != NO_AGENT_DATA) {
 			agentData = new byte [agentDataSize];
 			contFile.read(agentData);
-			if (!Arrays.equals(blockHmac.HashBlock(agentData, 0, agentDataSize), Arrays.copyOfRange(segmentHeader, 14, hashFunctionParamBlock.hashSize))) throw new Exception(Message.Get(Message.Code.InvalidContainer));
+			if (!Arrays.equals(blockHmac.HashBlock(agentData, 0, agentDataSize), Arrays.copyOfRange(segmentHeader, 14, 14 + hashFunctionParamBlock.hashSize))) throw new Exception(Message.Get(Message.Code.InvalidContainer));
 			
 			statistics.uAgentDataSize = agentDataSize;
 		}
@@ -1114,12 +1047,9 @@ final class Storage7 implements IKryptelComponent,
 		statistics.uTotalFixupListSize += fixupListSize;
 		
 		if (fixupListSize > 0) {
-			byte[] fxInitVector = new byte [cipherParamBlock.cipherBlockSize];
-			rawCipher.EncryptBlock(fxInitVector, 0, segmentHeader, 20 + hashFunctionParamBlock.hashSize);
 			
 			// Read and decrypt fixup list
-			
- 			cipherParams.SetInitVector(fxInitVector, 0, cipherParamBlock.cipherBlockSize);
+
 			cipher.Init(new DirDecryptSink(), null);
 
 			long flsize = fixupListSize;
@@ -1135,7 +1065,7 @@ final class Storage7 implements IKryptelComponent,
 			
 			// Fixup list has been decrypted into dirBuffer, now parse it
 			
-			Object7 obj;
+			Object8 obj;
 			short tag, nGuids;
 			UUID[] uidPath = new UUID [64];		// Tree depth 64 must be more than enough
 
@@ -1176,7 +1106,7 @@ final class Storage7 implements IKryptelComponent,
 						if (uidPath.length < nGuids) uidPath = new UUID [nGuids];
 						for (int i = 0; i < (nGuids - 1); i++) uidPath[i] = UuidFromBytes(dirBuffer.Retrieve(16), 0);
 						
-						Object7 target = rootObject.LocateChild(uidPath, 0, nGuids - 1);
+						Object8 target = rootObject.LocateChild(uidPath, 0, nGuids - 1);
 						assert !target.IsDeleted();
 						obj.MoveMe(target);
 					}
@@ -1202,24 +1132,23 @@ final class Storage7 implements IKryptelComponent,
 
 		newFile.seek(nextDataPos);
 
-		newMD5.digest(trailer, 34, 16);		// Data area hash
+		newMD5.digest(header, header.length - 64, 16);		// Data area hash
 		
 		// Save agent data
 		if (agentData == null) agentDataSize = 0;
 		IntAsBytes(agentDataSize, header, hdrAgentDataPos);
 		agentDataPos = nextDataPos;
 		System.arraycopy(LongAsBytes(agentDataPos), 0, header, hdrAgentDataPos + 4, 6);
-		System.arraycopy(header, hdrAgentDataPos + 4, trailer, 6, 6);
 		
 		
 		if (agentDataSize > 0) {
 			System.arraycopy(blockHmac.HashBlock(agentData, 0, agentDataSize), 0, header, hdrAgentDataPos + 10, hashFunctionParamBlock.hashSize);
-			System.arraycopy(newMD5.digest(agentData), 0, trailer, 50, 16);
+			System.arraycopy(newMD5.digest(agentData), 0, header, header.length - 48, 16);
 			newFile.write(agentData);
 		}
 		else {
 			Arrays.fill(header, hdrAgentDataPos + 10, hdrAgentDataPos + 10 + hashFunctionParamBlock.hashSize, (byte)0);
-			Arrays.fill(trailer, 50, 66, (byte)0);
+			Arrays.fill(header, header.length - 48, header.length - 32, (byte)0);
 		}
 		nextDataPos += agentDataSize;
 		
@@ -1236,8 +1165,8 @@ final class Storage7 implements IKryptelComponent,
 			rootObject.StoreObject();
 			
 			compressor.Done();
-			System.arraycopy(hmacFunc.Done(), 0, header, hdrDirDataPos + 6 + cipherParamBlock.cipherBlockSize, hashFunctionParamBlock.hashSize);
-			newMD5.digest(trailer, 66, 16);
+			System.arraycopy(hmacFunc.Done(), 0, header, hdrDirDataPos + 6, hashFunctionParamBlock.hashSize);
+			newMD5.digest(header, header.length - 32, 16);
 		}
 		catch (Exception e) {
 			cipherState.Reset();
@@ -1247,7 +1176,6 @@ final class Storage7 implements IKryptelComponent,
 
 		long dirSize = nextDataPos - dirStart;
 		System.arraycopy(LongAsBytes(dirSize), 0, header, hdrDirDataPos, 6);
-		System.arraycopy(header, hdrDirDataPos, trailer, 12, 6);
 
 		// Header is complete - compute its MD5 checksum and write both copies
 		newMD5.reset();
@@ -1255,20 +1183,10 @@ final class Storage7 implements IKryptelComponent,
 		newMD5.digest(header, header.length - 16, 16);
 		newFile.seek(0);
 		newFile.write(header);
+
+		// Write trailer
 		newFile.seek(nextDataPos);
-		newFile.write(header);
-		
-		// Complete trailer and write it
-		IntAsBytes(TRAILER_TAG, trailer, 0);
-		ShortAsBytes((short)header.length, trailer, 4);
-		newMD5.reset();
-		newMD5.update(header, 0, header.length);
-		newMD5.digest(trailer, 18, 16);
-		
-		newMD5.reset();
-		newMD5.update(trailer, 0, CONTAINER_TRAILER_SIZE - 16);
-		newMD5.digest(trailer, CONTAINER_TRAILER_SIZE - 16, 16);
-		newFile.write(trailer, 0, CONTAINER_TRAILER_SIZE);
+		newFile.write(trailer, 0, trailer.length);
 		
 		WriteAlignmentData();
 		
@@ -1290,7 +1208,7 @@ final class Storage7 implements IKryptelComponent,
 		byte[] fillData = new byte [ALIGNMENT_BOUNDARY];
 		for (int i = 0; i < fillData.length; i += 2) {
 			fillData[i] = (byte)0xED;
-			fillData[i + 1] = (byte)0xC7;
+			fillData[i + 1] = (byte)0xC8;
 		}
 		
 		if (bNewFile)
@@ -1308,29 +1226,25 @@ final class Storage7 implements IKryptelComponent,
 		ReduceFixupList();		// Reducing may produce empty list so we need to reduce first
 
 		if (agentDataUpdated || fixupList != null) {
-			IntAsBytes(FIXUP_TRAILER_TAG, trailer, 0);
-			LongAsBytes(segmentStart, trailer, 4);
-			
-			System.arraycopy(contMD5.digest(), 0, trailer, 38, 16);		// Data area hash
-			
 			header = new byte [segmentHeaderSize];
 			IntAsBytes(FIXUP_TAG, header, 0);
+			
+			System.arraycopy(contMD5.digest(), 0, header, 20 + 2 * hashFunctionParamBlock.hashSize, 16);		// Data area hash
 			
 			// Save agent data
 			
 			agentDataPos = nextDataPos;
 			LongAsBytes(agentDataPos, header, 8);
-			System.arraycopy(header, 8, trailer, 10, 6);
 			
 			Arrays.fill(header, 14, 14 + hashFunctionParamBlock.hashSize, (byte)0);		// Agent data HMAC
-			Arrays.fill(trailer, 54, 54 + 16, (byte)0);																// Segment header MD5 hash
+			Arrays.fill(header, 20 + 2 * hashFunctionParamBlock.hashSize + 16, 20 + 2 * hashFunctionParamBlock.hashSize + 32, (byte)0);																// Segment header MD5 hash
 
 			if (agentDataUpdated) {
 				if (agentData != null) {
 					IntAsBytes(agentData.length, header, 4);
 					System.arraycopy(blockHmac.HashBlock(agentData, 0, agentData.length), 0, header, 14, hashFunctionParamBlock.hashSize);
 					contMD5.reset();
-					System.arraycopy(contMD5.digest(agentData), 0, trailer, 14, 16);
+					System.arraycopy(contMD5.digest(agentData), 0, header, 20 + 2 * hashFunctionParamBlock.hashSize + 16, 16);
 					contFile.write(agentData);
 					nextDataPos += agentData.length;
 				}
@@ -1348,9 +1262,6 @@ final class Storage7 implements IKryptelComponent,
 				hmacFunc.Init();
 				contMD5.reset();
 
-				assert initVector != null;		// It must still contain the main dir init vector - discard it
-				rand.nextBytes(initVector);		// Create a new init vector for fixup list
-
 				try {
 					cipherParams.SetInitVector(initVector, 0, cipherParamBlock.cipherBlockSize);
 					compressorParams.SetLevel(CT_MAX_COMPRESSION);
@@ -1360,8 +1271,8 @@ final class Storage7 implements IKryptelComponent,
 					StoreFixupList();
 					
 					compressor.Done();
-					System.arraycopy(hmacFunc.Done(), 0, header, 14 + hashFunctionParamBlock.hashSize + 6 + cipherParamBlock.cipherBlockSize, hashFunctionParamBlock.hashSize);
-					System.arraycopy(contMD5.digest(), 0, trailer, 70, 16);
+					System.arraycopy(hmacFunc.Done(), 0, header, 14 + hashFunctionParamBlock.hashSize + 6, hashFunctionParamBlock.hashSize);
+					System.arraycopy(contMD5.digest(), 0, header, 20 + 2 * hashFunctionParamBlock.hashSize + 32, 16);
 				}
 				catch (Exception e) {
 					cipherState.Reset();
@@ -1371,27 +1282,20 @@ final class Storage7 implements IKryptelComponent,
 				
 				long fixupListSize = contFile.getFilePointer() - fixupListStart;
 				System.arraycopy(LongAsBytes(fixupListSize), 0, header, 14 + hashFunctionParamBlock.hashSize, 6);
-				System.arraycopy(LongAsBytes(fixupListStart), 0, trailer, 16, 6);
-				rawCipher.DecryptBlock(header, 14 + hashFunctionParamBlock.hashSize + 6, initVector, 0);
 			}
 			else {		// Empty fixup list
-				System.arraycopy(LongAsBytes(agentDataPos), 0, trailer, 16, 6);
-				Arrays.fill(header, 14 + hashFunctionParamBlock.hashSize, 14 + hashFunctionParamBlock.hashSize + 6 + cipherParamBlock.cipherBlockSize + hashFunctionParamBlock.hashSize, (byte)0);
-				Arrays.fill(trailer, 70, 70 + 16, (byte)0);
+				Arrays.fill(header, 14 + hashFunctionParamBlock.hashSize, 14 + hashFunctionParamBlock.hashSize + 6 + hashFunctionParamBlock.hashSize, (byte)0);
+				Arrays.fill(header, 20 + 2 * hashFunctionParamBlock.hashSize + 32, 20 + 2 * hashFunctionParamBlock.hashSize + 48, (byte)0);
 			}
 			
 			// Header is now complete - compute its MD5 checksum
+			assert (20 + 2 * hashFunctionParamBlock.hashSize + 48) == (segmentHeaderSize - 16);
 			contMD5.reset();
 			contMD5.update(header, 0, segmentHeaderSize - 16);
 			contMD5.digest(header, segmentHeaderSize - 16, 16);
 			
-			// Finalize and write segment trailer
-			System.arraycopy(header, segmentHeaderSize - 16, trailer, 22, 16);
-
-			contMD5.reset();
-			contMD5.update(trailer, 0, FIXUP_SEGMENT_TRAILER_SIZE - 16);
-			contMD5.digest(trailer, FIXUP_SEGMENT_TRAILER_SIZE - 16, 16);
-			contFile.write(trailer, 0, FIXUP_SEGMENT_TRAILER_SIZE);
+			// Write trailer
+			contFile.write(trailer, 0, trailer.length);
 
 			WriteAlignmentData();
 
@@ -1453,13 +1357,13 @@ final class Storage7 implements IKryptelComponent,
 
 
 	void ReduceFixupList() {
-		FixupObject7 p = fixupList;
+		FixupObject8 p = fixupList;
 		while (p != null) p = p.Reduce();
 	}
 	
 	
 	void StoreFixupList() throws Exception {
-		FixupObject7 p = fixupList;
+		FixupObject8 p = fixupList;
 		while (p != null) {
 			p.Store();
 			p = p.next;
@@ -1546,6 +1450,7 @@ final class Storage7 implements IKryptelComponent,
 			if (IsOpen() && IsReadOnly())
 				return	ESTOR_KEEPS_DELETED_OBJECTS		|
 								ESTOR_PROTECTED_KEY						|
+								ESTOR_KEY_BLOCK								|
 								ESTOR_STATISTICS							|
 								ESTOR_RECOVERY_BLOCKS;
 			else {
@@ -1558,6 +1463,7 @@ final class Storage7 implements IKryptelComponent,
 									ESTOR_KEEPS_DELETED_OBJECTS		|
 									ESTOR_CAN_UNDELETE						|
 									ESTOR_PROTECTED_KEY						|
+									ESTOR_KEY_BLOCK								|
 									ESTOR_STATISTICS							|
 									ESTOR_RECOVERY_BLOCKS;
 				if (IsOpen() && !IsNewFileActive() && (bModified || statistics.nFixupSegments > 0 || statistics.uDataAreaUnused > 0)) ret |= ESTOR_CAN_BE_COMPRESSED;
@@ -1595,89 +1501,77 @@ final class Storage7 implements IKryptelComponent,
 		}
 		
 		public UUID GetCipherCID() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCipherCID : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCipherCID : Container is not open.");
 			return cipherID;
 		}
 		
 		public CipherParameters GetCipherParameters() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCipherInfo : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCipherInfo : Container is not open.");
 			return new CipherParameters(cipherParamBlock);
 		}
 		
 		public String GetCipherName()  throws Exception{
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCipherName : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCipherName : Container is not open.");
 			return cipherName;
 		}
 		
 		public String GetCipherScheme() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCipherScheme : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCipherScheme : Container is not open.");
 			return cipherScheme;
 		}
 		
 		public UUID GetCompressorCID() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCompressorCID : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCompressorCID : Container is not open.");
 			return compressorID;
 		}
 		
 		public CompressorParameters GetCompressorParameters() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCompressorParameters : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCompressorParameters : Container is not open.");
 			return new CompressorParameters(compressorParamBlock);
 		}
 		
 		public String GetCompressorName() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCompressorName : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCompressorName : Container is not open.");
 			return compressorName;
 		}
 		
 		public String GetCompressorScheme() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetCompressorScheme : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetCompressorScheme : Container is not open.");
 			return compressorScheme;
 		}
 		
 		public UUID GetHashFunctionCID() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetHashFunctionCID : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetHashFunctionCID : Container is not open.");
 			return hashFunctionID;
 		}
 		
 		public HashFunctionParameters GetHashFunctionParameters() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetHashFunctionParameters : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetHashFunctionParameters : Container is not open.");
 			return new HashFunctionParameters(hashFunctionParamBlock);
 		}
 		
 		public String GetHashFunctionName() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetHashFunctionName : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetHashFunctionName : Container is not open.");
 			return hashFunctionName;
 		}
 		
 		public String GetHashFunctionScheme() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetHashFunctionScheme : Container is not open.");
+			if (!IsOpen()) throw new Exception("Storage::GetHashFunctionScheme : Container is not open.");
 			return hashFunctionScheme;
 		}
 		
 		public UUID GetKeyID() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetKeyID : Container is not open.");
-			assert keyRecord != null;
-			return keyRecord.keyMaterial;
+			byte[] kid = UuidToBytes(IDENT_NULL);
+			kid[0] = keyFlags;
+			return UuidFromBytes(kid, 0);
 		}
 		
 		public String GetKeyPath() throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::GetKeyPath : Container is not open.");
-			assert keyRecord != null;
-			return keyRecord.keyPath;
+			return "";
 		}
 		
 		public boolean TestPassword(String password) throws Exception {
-			if (!bHeaderAvailable) throw new Exception("Storage::TestPassword : Container is not open.");
-			if (!bTestPasswordContext) return false;	// Is not called from IKeyCallback
-			assert keyRecord != null;
-			if (keyRecord.keyMaterial != IDENT_PASSWORD && keyRecord.keyMaterial != IDENT_LOWERCASE_PASSWORD && keyRecord.keyMaterial != IDENT_PROTECTED_KEY) return false;
-			
-			KeyRecord kr = new KeyRecord();
-			kr.keyMaterial = keyRecord.keyMaterial;
-			kr.password = password;
-			ConvertPassword(kr, GetHashFunctionCID());
-			SetupHmac(kr, hashFunctionParamBlock.hashSize);
-			return Arrays.equals(keyVerificator, ComputeVerificator(verificationPasses));
+			throw new Exception("Storage::TestPassword : Kryptel 8+ does not support this function.");
 		}
 	}
 }

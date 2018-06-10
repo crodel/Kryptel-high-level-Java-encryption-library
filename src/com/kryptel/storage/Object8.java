@@ -1,9 +1,9 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          Object7.java
+  File:          Object8.java
 
-  Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
+  Copyright (c) 2018 Inv Softworks LLC,    http://www.kryptel.com
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -36,8 +36,8 @@ import java.util.UUID;
 import com.kryptel.Message;
 
 
-final class Object7 implements IEncryptedObject {
-	Object7(Storage7 storage, Object7 parent, Object7 next) {
+final class Object8 implements IEncryptedObject {
+	Object8(Storage8 storage, Object8 parent, Object8 next) {
 		this.storage = storage;
 		this.parent = parent;
 		this.next = next;
@@ -93,7 +93,7 @@ final class Object7 implements IEncryptedObject {
 		
 		storage.SetModified();
 		
-		if (!storage.IsNewFileActive()) new FixupAttachAttributes7(storage, this);
+		if (!storage.IsNewFileActive()) new FixupAttachAttributes8(storage, this);
 	}
 
 
@@ -121,7 +121,7 @@ final class Object7 implements IEncryptedObject {
 			
 		bStreamInNewFile = storage.IsNewFileActive();
 		
-		Stream7 stream = null;
+		Stream8 stream = null;
 		try {
 			storage.SetModified();		// We need to call this first to setup segment 'in-progress' header
 
@@ -147,7 +147,7 @@ final class Object7 implements IEncryptedObject {
 			else
 				storage.contFile.seek(storage.nextDataPos);
 			
-			stream = new Stream7(this, false, comprLevel);
+			stream = new Stream8(this, false, comprLevel);
 		}
 		catch (Exception e) {
 			assert stream == null;			// We haven't created a stream
@@ -164,12 +164,12 @@ final class Object7 implements IEncryptedObject {
 
 			if (storage.bStreamActive) throw new Exception("Object::OpenStream : Can't preform the requested operation while there is an active stream.");
 
-			Stream7 stream = null;
+			Stream8 stream = null;
 			try {
 				storage.bStreamActive = true;
 				bStreamIsOpen = true;
 				
-				stream = new Stream7(this, true, CT_DEFAULT_COMPRESSION);
+				stream = new Stream8(this, true, CT_DEFAULT_COMPRESSION);
 			}
 			catch (Exception e) {
 				assert stream == null;			// The stream is not open
@@ -217,7 +217,7 @@ final class Object7 implements IEncryptedObject {
 			}
 			storage.SetModified();
 
-			if (!storage.IsNewFileActive()) new FixupAttachData7(storage, this);
+			if (!storage.IsNewFileActive()) new FixupAttachData8(storage, this);
 		}
 	}
 
@@ -230,14 +230,14 @@ final class Object7 implements IEncryptedObject {
 		// As the first step we need to translate newParent to the object pointer
 		// (instead of IEncryptedObject) as we need to access its private fields.
 		
-		Object7 newParentObject = (Object7)newParent;
+		Object8 newParentObject = (Object8)newParent;
 		
 		// At this point newParentObject points to the Object of newParent
 	
-		FixupMoveObject7 fixupObject = storage.IsNewFileActive() ? null : new FixupMoveObject7(storage, this);
+		FixupMoveObject8 fixupObject = storage.IsNewFileActive() ? null : new FixupMoveObject8(storage, this);
 
 		// Check if ID is unique and generate new if not
-		Object7 ch;
+		Object8 ch;
 		boolean bUnique;
 
 		byte[] uidb = new byte [16];
@@ -285,7 +285,7 @@ final class Object7 implements IEncryptedObject {
 
 	public UUID[] GetChildren() throws Exception {
 		ArrayList<UUID> chlist = new ArrayList<UUID>();
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null) {
 			chlist.add(ch.objectID);
 			ch = ch.next;
@@ -299,7 +299,7 @@ final class Object7 implements IEncryptedObject {
 		if (IsDeleted()) throw new Exception("Object::CreateChildObject : Attempt to modify a deleted object.");
 		
 		// Generate an unique object ID
-		Object7 ch;
+		Object8 ch;
 		boolean bUnique;
 		byte[] uidb = new byte [16];
 		UUID id;
@@ -319,12 +319,12 @@ final class Object7 implements IEncryptedObject {
 			}
 		} while (!bUnique);
 		
-		child = new Object7(storage, this, child);
+		child = new Object8(storage, this, child);
 		child.objectID = id;
 		
 		storage.statistics.nObjects++;
 
-		if (!storage.IsNewFileActive()) new FixupAddObject7(storage, child);
+		if (!storage.IsNewFileActive()) new FixupAddObject8(storage, child);
 		
 		storage.SetModified();
 
@@ -333,7 +333,7 @@ final class Object7 implements IEncryptedObject {
 
 
 	public IEncryptedObject GetChildObject(UUID id) {
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null && !ch.objectID.equals(id)) ch = ch.next;
 		return (ch != null) ? ch : null;
 	}
@@ -345,30 +345,30 @@ final class Object7 implements IEncryptedObject {
 
 		if (storage.bStreamActive) throw new Exception("Object::DeleteChildObject : Can't perform the requested operation while there is an active stream.");
 
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null && !ch.objectID.equals(id)) ch = ch.next;
 		if (ch == null) throw new Exception("Object::DeleteChildObject : Attempt to delete a non-existent object.");
 
 		if (ch.IsDeleted()) throw new Exception("Object::DeleteChildObject : Attempt to delete a deleted object.");
 		ch.MarkAsDeleted();
-		if (!storage.IsNewFileActive()) new FixupDeleteObject7(storage, ch);
+		if (!storage.IsNewFileActive()) new FixupDeleteObject8(storage, ch);
 		storage.SetModified();
 	}
 
 
 	public void UndeleteChildObject(UUID id, boolean recursive) throws Exception {
 		if (storage.IsReadOnly()) throw new Exception("Object::UndeleteChildObject : Requested operation is illegal for a read-only container.");
-		if (!IsDeleted()) throw new Exception("Object::DeleteChildObject : Attempt to modify a deleted object.");
+		if (IsDeleted()) throw new Exception("Object::UndeleteChildObject : Attempt to modify a deleted object.");
 
 		if (storage.bStreamActive) throw new Exception("Object::UndeleteChildObject : Can't perform the requested operation while there is an active stream.");
 
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null && !ch.objectID.equals(id)) ch = ch.next;
 		if (ch == null) throw new Exception("Object::UndeleteChildObject : Attempt to undelete a non-existent object.");
 
 		if (!ch.IsDeleted()) throw new Exception("Object::UndeleteChildObject : Attempt to undelete an object, which is not deleted.");
 		ch.UnmarkAsDeleted(recursive);
-		if (!storage.IsNewFileActive()) new FixupUndeleteObject7(storage, ch, recursive);
+		if (!storage.IsNewFileActive()) new FixupUndeleteObject(storage, ch, recursive);
 		storage.SetModified();
 	}
 
@@ -381,10 +381,10 @@ final class Object7 implements IEncryptedObject {
 	
 	UUID objectID;
 	
-	Storage7 storage;
-	Object7 parent;
-	private Object7 next;
-	private Object7 child;
+	Storage8 storage;
+	Object8 parent;
+	private Object8 next;
+	private Object8 child;
 	
 	long dataPos;
 	long dataSize;
@@ -425,7 +425,7 @@ final class Object7 implements IEncryptedObject {
 			if (tag == OBJECT_END) break;
 			if (tag != OBJECT_START) throw new Exception(Message.Get(Message.Code.InvalidContainer));
 			
-			child = new Object7(storage, this, child);
+			child = new Object8(storage, this, child);
 			child.LoadObject();
 		}
 	}
@@ -519,11 +519,11 @@ final class Object7 implements IEncryptedObject {
 	}
 	
 	
-	Object7 LocateChild(UUID[] uidPath, int start, int nGuids) {
+	Object8 LocateChild(UUID[] uidPath, int start, int nGuids) {
 		// NOTE: The path must lead to an existing child
 		if (nGuids == 0) return this;
 
-		Object7 ch = child;
+		Object8 ch = child;
 		while (!ch.objectID.equals(uidPath[start])) {
 			ch = ch.next;
 			assert ch != null;
@@ -534,7 +534,7 @@ final class Object7 implements IEncryptedObject {
 	
 	
 	void LoadChildFromFixup(short tag) throws Exception {
-		child = new Object7(storage, this, child);
+		child = new Object8(storage, this, child);
 		
 		storage.statistics.nObjects++;
 		
@@ -548,11 +548,11 @@ final class Object7 implements IEncryptedObject {
 	}
 
 
-	void MoveMe(Object7 target) {
+	void MoveMe(Object8 target) {
 		assert !IsDeleted();
 
 		// Remove itself from the parent's children list
-		Object7 ch = parent.child;
+		Object8 ch = parent.child;
 		if (ch.objectID != objectID) {		// Not the first child
 			for (;;) {
 				assert ch.next != null;
@@ -578,7 +578,7 @@ final class Object7 implements IEncryptedObject {
 	void MarkAsDeleted() throws Exception {
 		assert !IsDeleted();
 		
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null) {
 			if (!ch.IsDeleted()) ch.MarkAsDeleted();
 			ch = ch.next;
@@ -617,7 +617,7 @@ final class Object7 implements IEncryptedObject {
 		assert IsDeleted();
 
 		if (recursive) {
-			Object7 ch = child;
+			Object8 ch = child;
 			while (ch != null) {
 				ch.UnmarkAsDeleted(recursive);
 				ch = ch.next;
@@ -680,7 +680,7 @@ final class Object7 implements IEncryptedObject {
 			storage.compressor.Compress(attrBlock, 0, attrBlock.length);
 		}
 		
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null) {
 			ch.StoreObject();
 			ch = ch.next;
@@ -695,7 +695,7 @@ final class Object7 implements IEncryptedObject {
 	void MoveDataStreams() throws IOException {
 		if (bDeleted) return;
 		
-		Object7 ch = child;
+		Object8 ch = child;
 		while (ch != null) {
 			ch.MoveDataStreams();
 			ch = ch.next;

@@ -1,9 +1,9 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          Stream7.java
+  File:          Stream8.java
 
-  Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
+  Copyright (c) 2018 Inv Softworks LLC,    http://www.kryptel.com
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -40,9 +40,9 @@ import com.kryptel.cipher.ICipher;
 import com.kryptel.compressor.ICompressor;
 
 
-class Stream7 implements IEncryptedStream {
+class Stream8 implements IEncryptedStream {
 	
-	Stream7(Object7 parent, boolean bRead, byte comprLevel) throws Exception {
+	Stream8(Object8 parent, boolean bRead, byte comprLevel) throws Exception {
 		this.parent = parent;
 		this.bRead = bRead;
 		
@@ -181,7 +181,7 @@ class Stream7 implements IEncryptedStream {
 					parent.storage.nextDataPos += parent.recBlockSize;
 				}
 
-				if (!parent.storage.IsNewFileActive()) new FixupAttachData7(parent.storage, parent);
+				if (!parent.storage.IsNewFileActive()) new FixupAttachData8(parent.storage, parent);
 
 				// Update statistics
 
@@ -223,7 +223,7 @@ class Stream7 implements IEncryptedStream {
 	//
 	
 	
-	private Object7 parent;
+	private Object8 parent;
 	private boolean bRead;
 	
 	private RandomAccessFile streamFile;

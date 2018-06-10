@@ -25,9 +25,9 @@ package com.kryptel.silver_key;
 
 
 import com.kryptel.IDataSink;
-import com.kryptel.IKeyCallback;
 import com.kryptel.IKryptelComponent;
 import com.kryptel.IProgressCallback;
+import com.kryptel.key.IKeyCallback;
 
 
 public interface ISilverKeyParcel {

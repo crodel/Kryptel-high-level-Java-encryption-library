@@ -1,10 +1,10 @@
 /*******************************************************************************
 
   Product:       Kryptel/Java
-  File:          Extractor.java
+  File:          Extractor5.java
   Description:   https://www.kryptel.com/articles/developers/java/sk.php
 
-  Copyright (c) 2017 Inv Softworks LLC,    http://www.kryptel.com
+  Copyright (c) 2018 Inv Softworks LLC,    http://www.kryptel.com
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -24,15 +24,11 @@
 package com.kryptel.silver_key;
 
 
-import static com.kryptel.ApiHelpers.ConvertPassword;
-import static com.kryptel.ApiHelpers.ExpectedKeyMaterial;
-import static com.kryptel.Constants.BINARY_KEY_SIZE;
 import static com.kryptel.Constants.DEFAULT_BUFFER_SIZE;
 import static com.kryptel.Guids.CID_COMPRESSOR_ZIP;
 import static com.kryptel.Guids.CID_HASH_SHA512;
-import static com.kryptel.Guids.CID_HASH_SHA512_64;
 import static com.kryptel.Guids.CID_HMAC;
-import static com.kryptel.Guids.CID_SILVER_KEY;
+import static com.kryptel.Guids.CID_SILVER_KEY_5;
 import static com.kryptel.Guids.IID_IBlockCipherParams;
 import static com.kryptel.Guids.IID_ICipher;
 import static com.kryptel.Guids.IID_ICompressor;
@@ -40,6 +36,7 @@ import static com.kryptel.Guids.IID_IHashFunction;
 import static com.kryptel.Guids.IID_IHashFunctionParams;
 import static com.kryptel.Guids.IID_IMacSetup;
 import static com.kryptel.Guids.IID_IMemoryBlockCompressor;
+import static com.kryptel.Guids.IID_IMemoryBlockHash;
 import static com.kryptel.Guids.IID_IRawBlockCipher;
 import static com.kryptel.IProgressCallback.MIN_SIZE_TO_STEP;
 import static com.kryptel.bslx.Conversions.GetAsInt;
@@ -48,6 +45,11 @@ import static com.kryptel.bslx.Conversions.GetAsShort;
 import static com.kryptel.bslx.Conversions.UuidFromBytes;
 import static com.kryptel.bslx.Targets.GetTargetName;
 import static com.kryptel.bslx.Targets.TARGET_ASK_USER;
+import static com.kryptel.key.KeyBlock.PASSWORD_CAN_DECRYPT;
+import static com.kryptel.key.KeyUtils.DeriveEncryptionKey;
+import static com.kryptel.key.KeyUtils.DeriveHmacKey;
+import static com.kryptel.key.KeyUtils.DeriveInitVector;
+import static com.kryptel.key.KeyUtils.FillComponentDescriptor;
 import static com.kryptel.silver_key.SilverKey.COMMAND_BACKGROUND;
 import static com.kryptel.silver_key.SilverKey.COMMAND_BACKGROUND_PICTURE;
 import static com.kryptel.silver_key.SilverKey.COMMAND_COMMENT;
@@ -73,18 +75,14 @@ import java.util.UUID;
 
 import com.kryptel.ApiHelpers;
 import com.kryptel.IDataSink;
-import com.kryptel.IKeyCallback;
 import com.kryptel.IKryptelComponent;
 import com.kryptel.INotification;
 import com.kryptel.IProgressCallback;
 import com.kryptel.IReplaceCallback;
-import com.kryptel.KeyIdent;
-import com.kryptel.KeyRecord;
 import com.kryptel.Loader;
 import com.kryptel.Message;
 import com.kryptel.Progress;
 import com.kryptel.IReplaceCallback.REPLACE_ACTION;
-import com.kryptel.bslx.Conversions;
 import com.kryptel.bslx.SmartBuffer;
 import com.kryptel.cipher.IBlockCipherParams;
 import com.kryptel.cipher.ICipher;
@@ -94,15 +92,24 @@ import com.kryptel.compressor.IMemoryBlockCompressor;
 import com.kryptel.exceptions.UserAbortException;
 import com.kryptel.hash_function.IHashFunction;
 import com.kryptel.hash_function.IHashFunctionParams;
+import com.kryptel.hash_function.IMemoryBlockHash;
+import com.kryptel.key.IKeyCallback;
 import com.kryptel.mac.IMacSetup;
 
 
-final class Extractor implements ISilverKeyExtractor {
-	Extractor(long capabilities) throws Exception {
+final class Extractor5 implements ISilverKeyExtractor {
+	Extractor5(long capabilities) throws Exception {
 		compCapabilities = capabilities;
+
+		hashFunctionComp = Loader.CreateComponent(CID_HASH_SHA512, compCapabilities);
+		hashFunctionParams = (IHashFunctionParams)hashFunctionComp.GetInterface(IID_IHashFunctionParams);
 
 		hmacComp = Loader.CreateComponent(CID_HMAC, compCapabilities);
 		hmacSetup = (IMacSetup)hmacComp.GetInterface(IID_IMacSetup);
+		hmacSetup.SetBase(CID_HASH_SHA512);
+		hmacParams = (IHashFunctionParams)hmacComp.GetInterface(IID_IHashFunctionParams);
+		blockHmac = (IMemoryBlockHash)hmacComp.GetInterface(IID_IMemoryBlockHash);
+		hmacFunc = (IHashFunction)hmacComp.GetInterface(IID_IHashFunction);
 		
 		compressorComp = Loader.CreateComponent(CID_COMPRESSOR_ZIP, compCapabilities);
 		blockCompressor = (IMemoryBlockCompressor)compressorComp.GetInterface(IID_IMemoryBlockCompressor);
@@ -131,9 +138,9 @@ final class Extractor implements ISilverKeyExtractor {
 		try {
 			if (!IsParcel(parcelFile, locator)) throw new Exception(Message.Get(Message.Code.InvalidParcel));
 			if (!VerifyParcelMD5(parcelFile, locator, arg, progressFunc, Message.Code.ParcelIntegrity)) throw new Exception(Message.Get(Message.Code.CorruptedParcel));
-			if (!locator.guidEngine.equals(CID_SILVER_KEY)) throw new Exception(Message.Get(Message.Code.WrongExtractor));
-			if (locator.versionRequired > Engine.ENGINE_VERSION) throw new Exception(Message.Get(Message.Code.OldVersion));
-			if (locator.versionCreated < Engine.MINIMAL_COMPATIBLE_ENGINE_VERSION) throw new Exception(Message.Get(Message.Code.IncompatibleVersion));
+			if (!locator.guidEngine.equals(CID_SILVER_KEY_5)) throw new Exception(Message.Get(Message.Code.WrongExtractor));
+			if (locator.versionRequired > Engine5.ENGINE_VERSION) throw new Exception(Message.Get(Message.Code.OldVersion));
+			if (locator.versionCreated < Engine5.MINIMAL_COMPATIBLE_ENGINE_VERSION) throw new Exception(Message.Get(Message.Code.IncompatibleVersion));
 			
 			LoadTrailer();
 			LoadHeader();
@@ -142,10 +149,6 @@ final class Extractor implements ISilverKeyExtractor {
 				assert (!parcelDescription.isEmpty());
 				if (!msgCallback.Show(parcelTitle, parcelDescription)) throw new UserAbortException();
 			}
-
-			hmacSetup.SetBase((locator.versionRequired >= Engine.ENGINE_VERSION_WITH_CORRECT_HMAC) ? CID_HASH_SHA512 : CID_HASH_SHA512_64);
-			hmacParams = (IHashFunctionParams)hmacComp.GetInterface(IID_IHashFunctionParams);
-			hmacFunc = (IHashFunction)hmacComp.GetInterface(IID_IHashFunction);
 
 			cipherComp = com.kryptel.cipher.ComponentLoader.CreateComponent(guidCipher, compCapabilities);
 			if (cipherComp == null) throw new Exception(Message.Get(Message.Code.CompNotFound));
@@ -158,22 +161,28 @@ final class Extractor implements ISilverKeyExtractor {
 			cipherParams.SetRounds(cipherRounds);
 			cipherParams.SetScheme(cipherScheme);
 			cipherParams.SetChainingMode(cipherChainingMode);
-			
-			keyRecord = keyFunc.Callback(arg, parcelTitle, ExpectedKeyMaterial(guidKey), guidKey);
-			if (keyRecord == null) throw new Exception(Message.Get(Message.Code.UserAbort));
-			if (keyRecord.keyMaterial.equals(KeyIdent.IDENT_PASSWORD) || keyRecord.keyMaterial.equals(KeyIdent.IDENT_LOWERCASE_PASSWORD)) ConvertPassword(keyRecord, CID_HASH_SHA512);
-			
-			cipherParams.SetKey(keyRecord.keyData, 0, cipherParams.GetKeySize());
-			SetupHmacKey(keyRecord);
 
-			try {
-				if (notificationCallback != null) notificationCallback.ShowNotification(Message.Code.VerifyingPassword);
-				byte[] keyVerificator = ComputeVerificator(verificationPasses);
-				if (!Arrays.equals(verificator, keyVerificator)) throw new Exception(Message.Get(Message.Code.WrongKey));
-			}
-			finally {
-				if (notificationCallback != null) notificationCallback.DismissNotification();
-			}
+			// Get key
+			
+			IKeyCallback.KeyData keyData = keyFunc.DecryptionKeyCallback(arg, parcelTitle, keyBlock,
+					FillComponentDescriptor(cipherComp, cipherParams, hashFunctionComp, hashFunctionParams));
+			encryptionKey = DeriveEncryptionKey(keyData.baseKey, cipherParams.GetKeySize());
+			hmacKey = DeriveHmacKey(keyData.baseKey);
+			initVector = DeriveInitVector(keyData.baseKey, cipherParams.GetBlockSize());
+
+			cipherParams.SetKey(encryptionKey, 0, encryptionKey.length);
+			rawBlockCipher.EncryptBlock(initVector, 0, initVector, 0);
+			cipherParams.SetInitVector(initVector, 0, cipherParams.GetBlockSize());
+
+			hmacSetup.SetKey(hmacKey, 0, hmacKey.length);
+			
+			// Check key block validity
+			
+			if (!Arrays.equals(keyBlockHmac, blockHmac.HashBlock(keyBlock, 0, keyBlock.length))) throw new Exception(Message.Get(Message.Code.KeyForged));
+			
+			// Check key access rights
+			
+			if ((keyData.flags & PASSWORD_CAN_DECRYPT) == 0) throw new Exception(Message.Get(Message.Code.InsufficientKeyRights));
 			
 			byte[] computedHmac = ApiHelpers.ComputeAreaHash(parcelFile, locator.parcelStart, fileAreaStart,
 					hmacFunc, arg, progressFunc, Message.Code.DetectTampering);
@@ -184,8 +193,6 @@ final class Extractor implements ISilverKeyExtractor {
 			computedHmac = ApiHelpers.ComputeAreaHash(parcelFile, locator.parcelStart + scriptAreaStart, trailerStart - scriptAreaStart,
 					hmacFunc, arg, progressFunc, Message.Code.DetectTampering);
 			if (!Arrays.equals(computedHmac, scriptAreaHmac)) throw new Exception(Message.Get(Message.Code.TamperedPacel));
-
-			rawBlockCipher.EncryptBlock(initVector, 0, initVector, 0);
 			
 			ReadScriptArea();
 
@@ -316,10 +323,6 @@ final class Extractor implements ISilverKeyExtractor {
 									}
 								}
 							}
-							else {
-								if (progress != null) progress.Step(fileSize);
-								break;
-							}
 							
 							streamCipher.Init(new FileDecryptionSink(), new FileOutputStream(path));
 							
@@ -391,8 +394,6 @@ final class Extractor implements ISilverKeyExtractor {
 	
 	private RandomAccessFile parcelFile;
 	private ParcelLocator locator = new ParcelLocator();
-
-	private KeyRecord keyRecord;
 	
 	private byte[] ioBuf = new byte [DEFAULT_BUFFER_SIZE];
 	private SmartBuffer scriptBuffer = new SmartBuffer();
@@ -421,13 +422,14 @@ final class Extractor implements ISilverKeyExtractor {
 	int cipherRounds;
 	byte cipherScheme;
 	int cipherChainingMode;
-	UUID guidKey;
-	short keyAssocDataSize;
-	byte[] keyAssocData;
-	int verificationPasses;			// Zero if no verificator
-	byte[] verificator = new byte [HASH_SIZE];
+	
+	private byte[] encryptionKey;
+	private byte[] hmacKey;
+	private byte[] initVector;
+	byte[] keyBlock;
+	private byte[] keyBlockHmac;
+
 	// End of pre-loaded part
-	byte[] initVector;
 	String cipherName;
 	String cipherSchemeName;
 	String parcelTitle;
@@ -443,7 +445,11 @@ final class Extractor implements ISilverKeyExtractor {
 	private IKryptelComponent hmacComp;
 	private IMacSetup hmacSetup;
 	private IHashFunctionParams hmacParams;
+	private IMemoryBlockHash blockHmac;
 	private IHashFunction hmacFunc;
+	
+	private IKryptelComponent hashFunctionComp;
+	private IHashFunctionParams hashFunctionParams;
 	
 	private IKryptelComponent compressorComp;
 	private IMemoryBlockCompressor blockCompressor;
@@ -481,32 +487,6 @@ final class Extractor implements ISilverKeyExtractor {
 		public void Done() throws Exception { streamCompressor.Done(); }
 	}
 	
-	private void SetupHmacKey(KeyRecord keyRecord) throws Exception {
-		assert (keyRecord.keyData.length > 0 && keyRecord.keyData.length <= BINARY_KEY_SIZE);
-		byte[] hmacKey = new byte [BINARY_KEY_SIZE];
-		Arrays.fill(hmacKey, (byte)0);
-		for (int i = 0, j = keyRecord.keyData.length; i < keyRecord.keyData.length; ) hmacKey[i++] = (byte)(~keyRecord.keyData[--j]);
-		hmacSetup.SetKey(hmacKey, 0, 512 / 8);
-	}
-	
-	
-	private byte[] ComputeVerificator(int nCounts) throws Exception {
-		byte[] keyVerificator = new byte [hmacParams.GetHashSize()];
-
-		int[] verArray = new int [nCounts];
-		byte[] verBytes = new byte [nCounts * 4];
-		
-		for (int i = 0; i < nCounts; i++) {
-			verArray[i] = i;
-			Conversions.ToBytes(verBytes, 0, verArray, 0, (i + 1) * 4);
-			hmacFunc.Init();
-			hmacFunc.Hash(verBytes, 0, (i + 1) * 4);
-			hmacFunc.Hash(keyVerificator, 0, keyVerificator.length);
-			keyVerificator = hmacFunc.Done();
-		}
-		return keyVerificator;
-	}
-	
 	
 	private void LoadTrailer() throws Exception {
 		byte[] buf = new byte [16];
@@ -529,7 +509,7 @@ final class Extractor implements ISilverKeyExtractor {
 		byte[] buf = new byte [128];
 
 		parcelFile.seek(locator.parcelStart + 4);
-		parcelFile.read(buf, 0, 92);
+		parcelFile.read(buf, 0, 78);
 
 		versionCreated = GetAsShort(buf, 0);
 		versionRequired = GetAsShort(buf, 2);
@@ -545,26 +525,11 @@ final class Extractor implements ISilverKeyExtractor {
 		cipherScheme = (byte)GetAsInt(buf, 68);
 		cipherChainingMode = GetAsInt(buf, 72);
 		
-		guidKey = UuidFromBytes(buf, 76);
-		if (guidKey.equals(KeyIdent.IDENT_YUBIKEY) || guidKey.equals(KeyIdent.IDENT_YUBIKEY_PASSWORD)) {
-			throw new Exception(Message.Get(Message.Code.UnsupportedKeyMaterial));
-			/*
-			parcelFile.read(buf, 0, 2);
-			keyAssocDataSize = GetAsShort(buf, 0);
-			if (keyAssocDataSize > 0) {
-				keyAssocData = new byte [keyAssocDataSize];
-				parcelFile.read(keyAssocData, 0, keyAssocDataSize);
-			}
-			*/
-		}
-		
-		parcelFile.read(buf, 0, 4);
-		verificationPasses = GetAsInt(buf, 0);
-		verificator = new byte [HASH_SIZE];
-		parcelFile.read(verificator, 0, HASH_SIZE);
-		
-		initVector = new byte [cipherBlockSize];
-		parcelFile.read(initVector, 0, cipherBlockSize);
+		int keyBlockSize = GetAsShort(buf, 76);
+		keyBlock = new byte [keyBlockSize];
+		parcelFile.read(keyBlock, 0, keyBlockSize);
+		keyBlockHmac = new byte [hmacParams.GetHashSize()];
+		parcelFile.read(keyBlockHmac, 0, keyBlockHmac.length);
 
 		cipherName = ReadString();
 		cipherSchemeName = ReadString();
